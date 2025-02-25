@@ -1,0 +1,214 @@
+---
+title: "sci vent chart study"
+format: html
+editor: visual
+---
+
+## Demographics
+
+```{r, echo=FALSE, message=FALSE}
+library(dplyr)
+sci_cleanned <- readRDS("sci_cleanned.rds")
+colnames(sci_cleanned)[colnames(sci_cleanned) == 'Wean.off.vent.for.full.24.hours.'] <- '24_hours_off_vent'
+colnames(sci_cleanned)[colnames(sci_cleanned) == 'If.yes.to.previous.question..How.many.days.from.admission.to.rehab.until.they.weaned..'] <- 'days_to_wean_during_day'
+colnames(sci_cleanned)[colnames(sci_cleanned) == 'Days.to.wean.24.hours'] <- 'days_to_wean_24hours'
+row_to_change <- 19
+sci_cleanned$'24_hours_off_vent'[row_to_change] <- FALSE
+```
+
+```{r, echo=FALSE, results="asis", message=FALSE}
+Level_table <- sci_cleanned %>% 
+  summarise(C2 = sum(level == "C2"),
+            C3 = sum(level == "C3"),
+            C4 = sum(level == "C4"),
+            C5 = sum(level == "C5"),
+            C6 = sum(level == "C6"),
+            C7 = sum(level == "C7"))
+demographics_table <- sci_cleanned %>% 
+  summarise(Male = sum(Sex == "M"),
+            Female = sum(Sex == "F"),
+            'Mean Age' = round(mean(Age),2),)
+asia_table <- sci_cleanned %>% 
+  select(level, asia) %>% 
+  group_by(level, asia) %>% 
+  summarise(
+    n=n()
+  )
+
+print(knitr::kable(demographics_table))
+print(knitr::kable(Level_table))
+print(knitr::kable(asia_table))
+```
+
+## Days from intury to intubation and trach grouped by injury level
+
+```{r, echo=FALSE, results="asis", message=FALSE}
+library(dplyr)
+results_by_level <- sci_cleanned %>% 
+  select(level, injury.to.intubation, intubation.to.Trach) %>% 
+  group_by(level) %>% 
+  summarise(
+    n=n(),
+    days_from_inj_to_int= round(mean(injury.to.intubation), 2), 
+    days_from_int_to_trach = round(mean(intubation.to.Trach), 2)
+  )
+
+
+print(knitr::kable(results_by_level))
+```
+
+## Count and percentage of patients who weaned and decanulated grouped by level and asia
+
+```{r, echo=FALSE, results="asis", message=FALSE}
+library(dplyr)
+selected_columns <- sci_cleanned[c('PAT_MRN_ID', 'level', 'asia', 'off.vent.during.the.day', '24_hours_off_vent', 'decanulate', 'days_to_wean_during_day', 'days_to_wean_24hours', 'Days.to.decanulation', 'Days.to.discharge')]
+asia_dataset <- data.frame(selected_columns)
+asia_dataset$off.vent.during.the.day <- as.logical(asia_dataset$off.vent.during.the.day)
+asia_dataset$ X24_hours_off_vent <- as.logical(asia_dataset$ X24_hours_off_vent)
+asia_dataset$decanulate <- as.logical(asia_dataset$decanulate)
+
+  
+result_by_asia <- asia_dataset %>%
+  group_by(level, asia) %>%
+  summarize(
+    n=n(),
+    count_off_vent_day = sum(off.vent.during.the.day == TRUE),
+    percentage_off_vent_day = round(mean(off.vent.during.the.day == TRUE) * 100, 2),
+    count_off_vent_24_hours = sum(`X24_hours_off_vent` == TRUE),
+    percentage_off_vent_24_hours = round(mean(`X24_hours_off_vent` == TRUE) * 100, 2),
+    count_decanulate = sum(decanulate == TRUE),
+    percentage_decanulate = round(mean(decanulate == TRUE) * 100, 2))
+
+  
+print(knitr::kable(result_by_asia))
+
+```
+
+## Average days from admission to rehab to wean off daytime vent
+
+```{r, echo=FALSE, results="asis", message=FALSE}
+
+wean_day <- sci_cleanned %>% 
+  select(level, off.vent.during.the.day, days_to_wean_during_day) %>% 
+  filter(off.vent.during.the.day == TRUE) %>%
+  filter(!is.na(days_to_wean_during_day)) %>%
+  group_by(level) %>% 
+  summarise(
+    n=n(),
+    average_days_to_wean_day = round(mean(days_to_wean_during_day), 2))
+  
+print(knitr::kable(wean_day))   
+```
+
+## Average days from admission to rehab to wean 24 hours grouped by level
+
+```{r, echo=FALSE, results="asis", message=FALSE}
+wean_24hours <- sci_cleanned %>%
+  select(level, `24_hours_off_vent`, days_to_wean_24hours) %>% 
+  filter(`24_hours_off_vent` == TRUE) %>% 
+  group_by(level) %>%
+  summarise(
+    n=n(), 
+    average_days_to_wean_24hours = round(mean(days_to_wean_24hours), 2))
+print(knitr::kable(wean_24hours))  
+```
+
+## Average days from admission to rehab to decanulation grouped by level
+
+```{r, echo=FALSE, results="asis", message=FALSE}
+decanulate_mean <- sci_cleanned %>% 
+  select(level, decanulate, Days.to.decanulation) %>%
+  filter(decanulate == TRUE) %>% 
+  group_by(level) %>% 
+  summarise(
+    n=n(), 
+    average_days_to_decanualtion = round(mean(Days.to.decanulation),2)
+  )
+print(knitr::kable(decanulate_mean))  
+```
+
+## Average days to discharge from rehab grouped by level
+
+```{r, echo=FALSE, results="asis", message=FALSE}
+average_days_to_discharge <- sci_cleanned %>%
+  select(level, Days.to.discharge) %>%
+  group_by(level) %>%
+  summarize(
+    n=n(), 
+    average_days_discharge_reahb = round(mean(Days.to.discharge),2)
+  )
+
+print(knitr::kable(average_days_to_discharge)) 
+```
+
+## OSH time in days to intubation and intubation to trach.
+
+```{r, echo=FALSE, results="asis"}
+
+## OSH
+
+osh_true <- sci_cleanned %>%
+  filter(OSH. == TRUE) %>%
+  group_by(level) %>%
+  summarise(
+    n=n(), 
+    injury_to_int = round(mean(injury.to.intubation), 2), 
+    int_to_trach = round(mean(intubation.to.Trach), 2), 
+  )
+
+print(knitr::kable(osh_true))
+
+```
+
+## U of U time in days to intubation and intubation to trach.
+
+```{r, echo=FALSE, results="asis"}
+osh_false <- sci_cleanned %>% 
+  filter(OSH. == FALSE) %>% 
+  group_by(level) %>% 
+  summarise(
+    n=n(),
+    injury_to_int = round(mean(injury.to.intubation), 2), 
+    int_to_trach = round(mean(intubation.to.Trach), 2),
+  )
+
+print(knitr::kable(osh_false))
+```
+
+## OSH vs UofU in days
+
+```{r, echo=FALSE, results="asis"}
+osh_true_total <- sci_cleanned %>% 
+  filter(OSH.== TRUE) %>%
+  summarise(
+    n=n(),
+        injury_to_int = round(mean(injury.to.intubation), 2), 
+    int_to_trach = round(mean(intubation.to.Trach), 2),
+  )
+
+osh_false_total <- sci_cleanned %>% 
+  filter(OSH.== FALSE) %>% 
+  summarise(
+    n=n(),
+        injury_to_int = round(mean(injury.to.intubation), 2), 
+    int_to_trach = round(mean(intubation.to.Trach), 2),
+  )
+
+osh_false_total$admission<- "U of U"
+osh_true_total$admission <- "OSH"
+osh_vs_uofu <- bind_rows(osh_false_total, osh_true_total) %>%
+  select(admission, n, injury_to_int, int_to_trach)
+
+
+print(knitr::kable(osh_vs_uofu))
+```
+
+```{r, echo=FALSE}
+confounding_factors_true <- sci_cleanned %>% 
+  filter(Rib.fractures == TRUE | Pneumothorax == TRUE | Chest.tube == TRUE) 
+
+confounding_factors_false <- sci_cleanned %>% 
+  filter(Rib.fractures == FALSE & Pneumothorax == FALSE & Chest.tube == FALSE) 
+ 
+  
+```
