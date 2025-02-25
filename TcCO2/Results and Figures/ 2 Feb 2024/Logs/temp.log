@@ -1,0 +1,1047 @@
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/blocke/Box Sync/Residency Personal Files/Stats/TcCO2/Results and Figures/ 2 Feb 2024/Logs/temp.log
+  log type:  text
+ opened on:   2 Feb 2024, 08:13:53
+
+. 
+. import excel "TcCo2 data table.xlsx", sheet("Sheet") firstrow
+worksheet Sheet not found
+r(601);
+
+end of do-file
+
+r(601);
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. import excel "TcCo2 data table.xlsx", sheet("Sheet1") firstrow
+(19 vars, 12 obs)
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. clear
+
+. cd "/Users/blocke/Box Sync/Residency Personal Files/Stats/TcCO2"
+/Users/blocke/Box Sync/Residency Personal Files/Stats/TcCO2
+
+. //cd "C:\Users\reblo\Box\Residency Personal Files\Stats\Clinical Trials Processed"
+. 
+. 
+. program define datetime 
+  1. end
+
+. 
+. capture mkdir "Results and Figures"
+
+. capture mkdir "Results and Figures/$S_DATE/" //make new folder for figure output if needed
+
+. capture mkdir "Results and Figures/$S_DATE/Logs/" //new folder for stata logs
+
+. local a1=substr(c(current_time),1,2)
+
+. local a2=substr(c(current_time),4,2)
+
+. local a3=substr(c(current_time),7,2)
+
+. local b = "TcCO2.do" // do file name
+
+. copy "`b'" "Results and Figures/$S_DATE/Logs/(`a1'_`a2'_`a3')`b'"
+
+. 
+. set scheme cleanplots
+
+. graph set window fontface "Helvetica"
+
+. 
+. 
+. 
+. capture log close
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/blocke/Box Sync/Residency Personal Files/Stats/TcCO2/Results and Figures/ 2 Feb 2024/Logs/temp.log
+  log type:  text
+ opened on:   2 Feb 2024, 08:15:19
+
+. 
+. import excel "TcCo2 data table.xlsx", sheet("Sheet1") firstrow lower
+option lower not allowed
+r(198);
+
+end of do-file
+
+r(198);
+
+. help import excel
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. clear
+
+. cd "/Users/blocke/Box Sync/Residency Personal Files/Stats/TcCO2"
+/Users/blocke/Box Sync/Residency Personal Files/Stats/TcCO2
+
+. //cd "C:\Users\reblo\Box\Residency Personal Files\Stats\Clinical Trials Processed"
+. 
+. 
+. program define datetime 
+  1. end
+
+. 
+. capture mkdir "Results and Figures"
+
+. capture mkdir "Results and Figures/$S_DATE/" //make new folder for figure output if needed
+
+. capture mkdir "Results and Figures/$S_DATE/Logs/" //new folder for stata logs
+
+. local a1=substr(c(current_time),1,2)
+
+. local a2=substr(c(current_time),4,2)
+
+. local a3=substr(c(current_time),7,2)
+
+. local b = "TcCO2.do" // do file name
+
+. copy "`b'" "Results and Figures/$S_DATE/Logs/(`a1'_`a2'_`a3')`b'"
+
+. 
+. set scheme cleanplots
+
+. graph set window fontface "Helvetica"
+
+. 
+. 
+. 
+. capture log close
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+      name:  <unnamed>
+       log:  /Users/blocke/Box Sync/Residency Personal Files/Stats/TcCO2/Results and Figures/ 2 Feb 2024/Logs/temp.log
+  log type:  text
+ opened on:   2 Feb 2024, 08:15:47
+
+. 
+. import excel "TcCo2 data table.xlsx", sheet("Sheet1") firstrow case(lower)
+(19 vars, 12 obs)
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. scatter carbondioxidetensionbefore sp02beforetreatment, title("Scatter Plot of CO2 Tension vs. SpO2 Before Treatment") xlabel("SpO2 Before Treatment") ylabe
+> l("CO2 Tension Before Treatment")
+invalid label specifier, :  "SpO2 Before Treatment":
+r(198);
+
+end of do-file
+
+r(198);
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. scatter carbondioxidetensionbefore sp02beforetreatment, title("Scatter Plot of CO2 Tension vs. SpO2 Before Treatment") xlabel("SpO2 Before Treatment") ylabe
+> l("CO2 Tension Before Treatment")
+invalid label specifier, :  "SpO2 Before Treatment":
+r(198);
+
+end of do-file
+
+r(198);
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. scatter carbondioxidetensionbefore sp02beforetreatment, title("Scatter Plot of CO2 Tension vs. SpO2 Before Treatment") 
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. twoway (scatter carbondioxidetensionbefore sp02beforetreatment) (lfit carbondioxidetensionbefore sp02beforetreatment), title("Scatter Plot with Linear Regre
+> ssion Line") xlabel("SpO2 Before Treatment") ylabel("CO2 Tension Before Treatment")
+invalid label specifier, :  "SpO2 Before Treatment":
+r(198);
+
+end of do-file
+
+r(198);
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. twoway (scatter carbondioxidetensionbefore sp02beforetreatment) (lfit carbondioxidetensionbefore sp02beforetreatment), title("Scatter Plot with Linear Regre
+> ssion Line") 
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. twoway (scatter carbondioxidetensionbefore oxygensaturationbeforestudy) (lfit carbondioxidetensionbefore oxygensaturationbeforestudy), title("Before Treatme
+> nt") legend(off) 
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. twoway (scatter carbondioxidetensionafter oxygensaturationafterstudy) (lfit carbondioxidetensionbefore oxygensaturationafterstudy), title("Before Treatment"
+> ) legend(off) 
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. 
+. twoway (scatter carbondioxidetensionafter oxygensaturationafterstudy) (lfit carbondioxidetensionbefore oxygensaturationafterstudy), title("After Treatment")
+>  legend(off) 
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. gen delta_ph = phafterstudy - phbeforestudy
+(1 missing value generated)
+
+. gen delta_co2 = carbondioxidetensionafter - carbondioxidetensionbefore
+(1 missing value generated)
+
+. gen delta_po2 = oxygentensionafterstudy - oxygentensionbeforestudy
+(1 missing value generated)
+
+. gen delta_base = baseexcessafterstudy - baseexcessbeforestudy
+(1 missing value generated)
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. twoway (scatter delta_co2 delta_base) (lfit delta_co2 delta_base), title("Delta") legend(off) 
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. twoway (scatter delta_co2 delta_po2) (lfit delta_co2 delta_po2), title("Delta") legend(off) 
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. regress carbondioxidetensionafter carbondioxidetensionbefore ageyrs bmi
+
+      Source |       SS           df       MS      Number of obs   =        11
+-------------+----------------------------------   F(3, 7)         =      1.80
+       Model |  78.7472499         3  26.2490833   Prob > F        =    0.2340
+    Residual |   101.81275         7  14.5446786   R-squared       =    0.4361
+-------------+----------------------------------   Adj R-squared   =    0.1945
+       Total |      180.56        10      18.056   Root MSE        =    3.8137
+
+--------------------------------------------------------------------------------------------
+ carbondioxidetensionafter | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+---------------------------+----------------------------------------------------------------
+carbondioxidetensionbefore |   .4411652   .3393068     1.30   0.235     -.361168    1.243498
+                    ageyrs |    .227591   .2333846     0.98   0.362    -.3242758    .7794578
+                       bmi |   .0170579   .1589014     0.11   0.918    -.3586841    .3927999
+                     _cons |   8.217613   20.13145     0.41   0.695     -39.3857    55.82093
+--------------------------------------------------------------------------------------------
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. cd "/Users/blocke/Box Sync/Residency Personal Files/MSCI/MDCRC 6200 SRMA" // change to your folder
+/Users/blocke/Box Sync/Residency Personal Files/MSCI/MDCRC 6200 SRMA
+
+. 
+. //cd "C:\Users\reblo\Box\Residency Personal Files\MSCI\MDCRC 6200 SRMA" //pc version
+. 
+. clear
+
+. import excel "2024-2-5 Data Extraction working.xlsx", sheet("Sheet1") firstrow case(lower)
+(64 vars, 16 obs)
+
+. program define datetime 
+  1. end
+
+. keep if !missing(stauthor) // drop lines that don't correspond to studies
+(5 observations deleted)
+
+. 
+. 
+. capture mkdir "Results and Figures"
+
+. capture mkdir "Results and Figures/$S_DATE/" //make new folder for figure output if needed
+
+. capture mkdir "Results and Figures/$S_DATE/Logs/" //new folder for stata logs
+
+. local a1=substr(c(current_time),1,2)
+
+. local a2=substr(c(current_time),4,2)
+
+. local a3=substr(c(current_time),7,2)
+
+. local b = "OSA Wt Loss SRMA.do" // do file name
+
+. copy "`b'" "Results and Figures/$S_DATE/Logs/(`a1'_`a2'_`a3')`b'"
+
+. 
+. 
+. //convert to number types
+. destring interventionn intbaselineweightmeanormed intbaselineweightsd intfinalweightmeanormedian intfinalweightsd intmeanweightchange intmeanweightchangesd 
+> intmeanweightdifference intmeanweightdifferencesd intbaselineahimean intbaselineahisd intfinalahimean intfinalahisd intmeanahichange intmeanahichangesd intm
+> eandifferenceahi intmeandifferenceahisd controln controlbaselineweightmeanor controlbaselineweightsd controlfinalweightmeanorme controlfinalweightsd control
+> meanweightchange controlmeanweightchangesd controlmeanweightdifference controlweightdifferencesd controlbaselineahimeanorme controlbaselineahisd controlfina
+> lahimeanormedia controlfinalahisd controlmeanahichange controlmeanahichangesd controlmeanahidifference controlmeanahidifferencesd followupdurationmonths con
+> trolessbaseline controlessbaselinesd controlessfinal controlessfinalsd controlessdiff controlessdiffsd controlesschange controlesschangesd intbaselineess in
+> tbaselineesssd intfinaless intfinalesssd intessdiff intessdiffsd intesschange intesschangesd, replace
+interventionn already numeric; no replace
+intbaselineweightmeanormed: all characters numeric; replaced as double
+intbaselineweightsd: all characters numeric; replaced as double
+intfinalweightmeanormedian already numeric; no replace
+intfinalweightsd already numeric; no replace
+intmeanweightchange: all characters numeric; replaced as double
+intmeanweightchangesd: all characters numeric; replaced as double
+intmeanweightdifference: all characters numeric; replaced as double
+intmeanweightdifferencesd: all characters numeric; replaced as double
+intbaselineahimean already numeric; no replace
+intbaselineahisd already numeric; no replace
+intfinalahimean already numeric; no replace
+intfinalahisd already numeric; no replace
+intmeanahichange already numeric; no replace
+intmeanahichangesd already numeric; no replace
+intmeandifferenceahi already numeric; no replace
+intmeandifferenceahisd: all characters numeric; replaced as double
+controln already numeric; no replace
+controlbaselineweightmeanor already numeric; no replace
+controlbaselineweightsd already numeric; no replace
+controlfinalweightmeanorme already numeric; no replace
+controlfinalweightsd: all characters numeric; replaced as double
+(4 missing values generated)
+controlmeanweightchange already numeric; no replace
+controlmeanweightchangesd: all characters numeric; replaced as double
+controlmeanweightdifference already numeric; no replace
+controlweightdifferencesd: all characters numeric; replaced as double
+controlbaselineahimeanorme already numeric; no replace
+controlbaselineahisd already numeric; no replace
+controlfinalahimeanormedia already numeric; no replace
+controlfinalahisd already numeric; no replace
+controlmeanahichange already numeric; no replace
+controlmeanahichangesd already numeric; no replace
+controlmeanahidifference already numeric; no replace
+controlmeanahidifferencesd: all characters numeric; replaced as double
+followupdurationmonths already numeric; no replace
+controlessbaseline already numeric; no replace
+controlessbaselinesd already numeric; no replace
+controlessfinal already numeric; no replace
+controlessfinalsd already numeric; no replace
+controlessdiff already numeric; no replace
+controlessdiffsd already numeric; no replace
+controlesschange already numeric; no replace
+controlesschangesd already numeric; no replace
+intbaselineess already numeric; no replace
+intbaselineesssd already numeric; no replace
+intfinaless already numeric; no replace
+intfinalesssd already numeric; no replace
+intessdiff already numeric; no replace
+intessdiffsd already numeric; no replace
+intesschange already numeric; no replace
+intesschangesd already numeric; no replace
+
+. 
+. tostring year, gen(year_str)
+year_str generated as str4
+
+. gen int_wt_loss_effect = controlmeanweightchange - intmeanweightchange
+
+. gen study_label = stauthor + " (" + year_str + "), " + interventiontype
+
+. 
+. //fix data entry errors.
+. replace stauthor = "Eskandari" if stauthor == "Eskandri"
+(1 real change made)
+
+. replace year = 2010 if stauthor == "Winslow"
+(1 real change made)
+
+. 
+. recode int_wt_loss_effect min/5=0 5/10=1 10/15=2 15/max=3, gen(wt_loss_cat)
+(11 differences between int_wt_loss_effect and wt_loss_cat)
+
+. label variable wt_loss_cat "Amount of Weight Loss"
+
+. label define wt_loss_cat_label 0 "<5% Avg Weight Loss" 1 "5-10% Avg Weight Loss" 2 "10-15% Avg Weight Loss" 3 "15% or More Avg Weight Loss"
+
+. label values wt_loss_cat wt_loss_cat_label
+
+. 
+. encode studycategory, gen(surg_vs_med) // make into numeric variables. 
+
+. label define rob_label 0 "Low Risk" 1 "Some Concerns" 2 "High Risk"
+
+. destring rob, replace 
+rob: all characters numeric; replaced as byte
+(1 missing value generated)
+
+. label values rob rob_label
+
+. label variable rob "Overall Risk of Bias"
+
+. 
+. //10% threshold var 
+. recode int_wt_loss_effect min/10=0 10/max=1, gen(ten_perc_wt)
+(11 differences between int_wt_loss_effect and ten_perc_wt)
+
+. label define ten_perc_wt_label 0 "<10% Avg Weight Loss" 1 "10% or More Avg Weight Loss"
+
+. label values ten_perc_wt ten_perc_wt_label
+
+. list wt_loss_cat ten_perc_wt
+
+     +-----------------------------------------------------------+
+     |                 wt_loss_cat                   ten_perc_wt |
+     |-----------------------------------------------------------|
+  1. | 15% or More Avg Weight Loss   10% or More Avg Weight Loss |
+  2. |      10-15% Avg Weight Loss   10% or More Avg Weight Loss |
+  3. | 15% or More Avg Weight Loss   10% or More Avg Weight Loss |
+  4. |       5-10% Avg Weight Loss          <10% Avg Weight Loss |
+  5. |         <5% Avg Weight Loss          <10% Avg Weight Loss |
+     |-----------------------------------------------------------|
+  6. |         <5% Avg Weight Loss          <10% Avg Weight Loss |
+  7. |         <5% Avg Weight Loss          <10% Avg Weight Loss |
+  8. |       5-10% Avg Weight Loss          <10% Avg Weight Loss |
+  9. |         <5% Avg Weight Loss          <10% Avg Weight Loss |
+ 10. |         <5% Avg Weight Loss          <10% Avg Weight Loss |
+     |-----------------------------------------------------------|
+ 11. |         <5% Avg Weight Loss          <10% Avg Weight Loss |
+     +-----------------------------------------------------------+
+
+. 
+. label variable studycategory "Type of Intervention"
+
+. label variable studysubcategory "Class of Intervention"
+
+. label variable interventiontype "Intervention"
+
+. label variable int_wt_loss_effect "Intervention Weight Loss Estimate (%BMI change)"
+
+. label variable study_label "Study"
+
+. 
+. replace studysubcategory = studycategory + ": " + studysubcategory
+(11 real changes made)
+
+. replace interventiontype = studycategory + ": " + interventiontype
+(11 real changes made)
+
+. replace studysubcategory = "Medication: Other" if studysubcategory == "Medication: Medication: Other"
+(2 real changes made)
+
+. 
+. save osa_antiobesity_srma, replace
+file osa_antiobesity_srma.dta saved
+
+. * End of data processing
+. 
+. 
+. //[x] TODO: why is TANG weighted so strongly? standard error not deviation reported?? I think they actually reported standard errors
+. //[x] TODO: Recalculate the p-values for TANG to prove that they reported standard errors and not standard deviations 
+. // This ended up not acctually working... they calculated them correctly, but just have implausibly precise results.
+. //Tang: baseline weight -
+. ttesti 18 28.17 1.21 18 28.04 1.19 // 0.74. = as reported, suggests that analyzed as if SD = 1.21 and 1.19
+
+Two-sample t test with equal variances
+------------------------------------------------------------------------------
+         |     Obs        Mean    Std. err.   Std. dev.   [95% conf. interval]
+---------+--------------------------------------------------------------------
+       x |      18       28.17    .2851997        1.21    27.56828    28.77172
+       y |      18       28.04    .2804857        1.19    27.44823    28.63177
+---------+--------------------------------------------------------------------
+Combined |      36      28.105    .1974349     1.18461    27.70419    28.50581
+---------+--------------------------------------------------------------------
+    diff |                 .13    .4000139                -.682926     .942926
+------------------------------------------------------------------------------
+    diff = mean(x) - mean(y)                                      t =   0.3250
+H0: diff = 0                                     Degrees of freedom =       34
+
+    Ha: diff < 0                 Ha: diff != 0                 Ha: diff > 0
+ Pr(T < t) = 0.6264         Pr(|T| > |t|) = 0.7472          Pr(T > t) = 0.3736
+
+. ttesti 18 28.17 5.13 18 28.04 5.04 // 0.94 (if they reported SE)
+
+Two-sample t test with equal variances
+------------------------------------------------------------------------------
+         |     Obs        Mean    Std. err.   Std. dev.   [95% conf. interval]
+---------+--------------------------------------------------------------------
+       x |      18       28.17    1.209153        5.13    25.61891    30.72109
+       y |      18       28.04    1.187939        5.04    25.53367    30.54633
+---------+--------------------------------------------------------------------
+Combined |      36      28.105    .8354101     5.01246    26.40903    29.80097
+---------+--------------------------------------------------------------------
+    diff |                 .13    1.695066               -3.314789    3.574789
+------------------------------------------------------------------------------
+    diff = mean(x) - mean(y)                                      t =   0.0767
+H0: diff = 0                                     Degrees of freedom =       34
+
+    Ha: diff < 0                 Ha: diff != 0                 Ha: diff > 0
+ Pr(T < t) = 0.5303         Pr(|T| > |t|) = 0.9393          Pr(T > t) = 0.4697
+
+. //Tang: baseline AHI
+. ttesti 18 37.45 6.04 18 38.11 6.27 // 0.74 = as reported, suggests that analyzed as if SD = 6.04 and 6.27
+
+Two-sample t test with equal variances
+------------------------------------------------------------------------------
+         |     Obs        Mean    Std. err.   Std. dev.   [95% conf. interval]
+---------+--------------------------------------------------------------------
+       x |      18       37.45    1.423642        6.04    34.44638    40.45362
+       y |      18       38.11    1.477853        6.27      34.992      41.228
+---------+--------------------------------------------------------------------
+Combined |      36       37.78    1.012786    6.076716    35.72393    39.83607
+---------+--------------------------------------------------------------------
+    diff |                -.66    2.052025               -4.830216    3.510216
+------------------------------------------------------------------------------
+    diff = mean(x) - mean(y)                                      t =  -0.3216
+H0: diff = 0                                     Degrees of freedom =       34
+
+    Ha: diff < 0                 Ha: diff != 0                 Ha: diff > 0
+ Pr(T < t) = 0.3748         Pr(|T| > |t|) = 0.7497          Pr(T > t) = 0.6252
+
+. ttesti 18 37.45 25.61 18 38.11 26.58 // 0.94 if they reported SE
+
+Two-sample t test with equal variances
+------------------------------------------------------------------------------
+         |     Obs        Mean    Std. err.   Std. dev.   [95% conf. interval]
+---------+--------------------------------------------------------------------
+       x |      18       37.45    6.036335       25.61    24.71445    50.18555
+       y |      18       38.11    6.264966       26.58    24.89208    51.32792
+---------+--------------------------------------------------------------------
+Combined |      36       37.78    4.287689    25.72613    29.07553    46.48447
+---------+--------------------------------------------------------------------
+    diff |                -.66    8.699836               -18.34019    17.02019
+------------------------------------------------------------------------------
+    diff = mean(x) - mean(y)                                      t =  -0.0759
+H0: diff = 0                                     Degrees of freedom =       34
+
+    Ha: diff < 0                 Ha: diff != 0                 Ha: diff > 0
+ Pr(T < t) = 0.4700         Pr(|T| > |t|) = 0.9400          Pr(T > t) = 0.5300
+
+. //Tang: int final weight diff
+. ttesti 18 28.17 1.21 18 25.92 0.92
+
+Two-sample t test with equal variances
+------------------------------------------------------------------------------
+         |     Obs        Mean    Std. err.   Std. dev.   [95% conf. interval]
+---------+--------------------------------------------------------------------
+       x |      18       28.17    .2851997        1.21    27.56828    28.77172
+       y |      18       25.92    .2168461         .92    25.46249    26.37751
+---------+--------------------------------------------------------------------
+Combined |      36      27.045    .2594882    1.556929    26.51821    27.57179
+---------+--------------------------------------------------------------------
+    diff |                2.25    .3582752                1.521897    2.978103
+------------------------------------------------------------------------------
+    diff = mean(x) - mean(y)                                      t =   6.2801
+H0: diff = 0                                     Degrees of freedom =       34
+
+    Ha: diff < 0                 Ha: diff != 0                 Ha: diff > 0
+ Pr(T < t) = 1.0000         Pr(|T| > |t|) = 0.0000          Pr(T > t) = 0.0000
+
+. ///
+> //Tang: cont final weight diff
+. ttesti 18 28.04 1.19 18 27.04 1.11
+
+Two-sample t test with equal variances
+------------------------------------------------------------------------------
+         |     Obs        Mean    Std. err.   Std. dev.   [95% conf. interval]
+---------+--------------------------------------------------------------------
+       x |      18       28.04    .2804857        1.19    27.44823    28.63177
+       y |      18       27.04    .2616295        1.11    26.48801    27.59199
+---------+--------------------------------------------------------------------
+Combined |      36       27.54    .2070569    1.242341    27.11965    27.96035
+---------+--------------------------------------------------------------------
+    diff |                   1    .3835651                .2205018    1.779498
+------------------------------------------------------------------------------
+    diff = mean(x) - mean(y)                                      t =   2.6071
+H0: diff = 0                                     Degrees of freedom =       34
+
+    Ha: diff < 0                 Ha: diff != 0                 Ha: diff > 0
+ Pr(T < t) = 0.9933         Pr(|T| > |t|) = 0.0135          Pr(T > t) = 0.0067
+
+. ///
+> //Tang Group diff vs 0
+. ttesti 18 -1.21 0.85 0
+
+One-sample t test
+------------------------------------------------------------------------------
+         |     Obs        Mean    Std. err.   Std. dev.   [95% conf. interval]
+---------+--------------------------------------------------------------------
+       x |      18       -1.21    .2003469         .85   -1.632695   -.7873049
+------------------------------------------------------------------------------
+    mean = mean(x)                                                t =  -6.0395
+H0: mean = 0                                     Degrees of freedom =       17
+
+    Ha: mean < 0                 Ha: mean != 0                 Ha: mean > 0
+ Pr(T < t) = 0.0000         Pr(|T| > |t|) = 0.0000          Pr(T > t) = 1.0000
+
+. ttesti 18 -1.21 3.604 0 //p=0.17; suggests they actually did report SD? 
+
+One-sample t test
+------------------------------------------------------------------------------
+         |     Obs        Mean    Std. err.   Std. dev.   [95% conf. interval]
+---------+--------------------------------------------------------------------
+       x |      18       -1.21    .8494709       3.604   -3.002227     .582227
+------------------------------------------------------------------------------
+    mean = mean(x)                                                t =  -1.4244
+H0: mean = 0                                     Degrees of freedom =       17
+
+    Ha: mean < 0                 Ha: mean != 0                 Ha: mean > 0
+ Pr(T < t) = 0.0862         Pr(|T| > |t|) = 0.1724          Pr(T > t) = 0.9138
+
+. 
+. //[x] TODO: Try this Tang et al.: You are right - I think they used the wrong parameters for their statistical tests as well. Using clinical implausibity as
+>  a justification is probably acceptable but I will try and back it up statistically too. I noticed that they report the age range of participants as 18 to 6
+> 5. If we assume that the 95% CI would cover almost the entire range of values, then the "SD" they provided would not be plausible. Let me know if you think 
+> this works.
+. 
+. //Baseline BMI: 95% CI would be 1.21 * 3.92 = all within BMI of 4.7, [around 28.17 e.g.] yet weight restrictions were not enrollment criteria
+. //Baseline AHI: 95% CI would be 6.04 * 3.91 = all within AHI of 23.68 (around 37.. so ~25.5 - 49)
+. //Difference: (28.17 - 25.92) - (28.04 - 27.04) = -1.25 (reported -1.21, close enough)
+. //est ..diff of dffs is, but assuming indiv is the same .85 = sqrt (1.21^2 + 0.92^2 - (2 * r * 1.21 * 0.92) -> r of 0.71 which checks out (though this isn't
+>  perfect)
+. 
+. 
+. * --------
+. 
+. * Data analysis
+. use osa_antiobesity_srma, clear
+
+. set scheme cleanplots //white_tableau? white_w3d?
+
+. capture mkdir "Results and Figures/$S_DATE/" //make new folder for figure output if needed
+
+. 
+. // ----absolute effect, AHI change: PRIMARY ANALYSIS ----
+. 
+. meta esize interventionn intmeandifferenceahi intmeandifferenceahisd controln controlmeanahidifference controlmeanahidifferencesd, eslabel(MD) random(reml) 
+> studylabel (study_label) esize( mdiff )
+
+Meta-analysis setting information
+
+ Study information
+    No. of studies: 11
+       Study label: study_label
+        Study size: _meta_studysize
+      Summary data: interventionn intmeandifferenceahi intmeandifferenceahisd controln controlmeanahidifference controlmeanahidifferencesd
+
+       Effect size
+              Type: mdiff
+             Label: MD
+          Variable: _meta_es
+
+         Precision
+         Std. err.: _meta_se
+    Std. err. adj.: None
+                CI: [_meta_cil, _meta_ciu]
+          CI level: 95%
+
+  Model and method
+             Model: Random effects
+            Method: REML
+
+. meta summarize, predinterval(95)
+
+  Effect-size label: MD
+        Effect size: _meta_es
+          Std. err.: _meta_se
+        Study label: study_label
+
+Meta-analysis summary                                           Number of studies =     11
+Random-effects model                                            Heterogeneity:
+Method: REML                                                                tau2 = 10.5807
+                                                                          I2 (%) =   51.89
+                                                                              H2 =    2.08
+
+------------------------------------------------------------------------------------------
+                                  Study |             MD    [95% conf. interval]  % weight
+----------------------------------------+-------------------------------------------------
+Furlan (2021), Roux-En-Y Gastric Bypass |        -18.200     -26.260     -10.140      8.75
+ Feigel-Guiller (2015), Gastric Banding |        -13.000     -22.941      -3.059      6.63
+          Dixon (2012), Gastric Banding |        -11.500     -23.706       0.706      4.87
+         Bakker (2017), Gastric Banding |         -6.300     -19.124       6.524      4.51
+            Eskandri (2013), Zonisamide |        -12.700     -25.365      -0.035      4.60
+           Blackman (2016), Liraglutide |         -6.100     -11.372      -0.828     13.50
+             Tang (2019), Dapagliflozin |         -8.720     -20.941       3.501      4.86
+ Winslow (2011), Phentermine/Topiramate |        -14.900     -26.542      -3.258      5.25
+                 Chen (2020), Exenatide |         -1.900      -9.346       5.546      9.62
+            ROMANCE (2022), Liraglutide |         -4.075      -7.729      -0.421     17.12
+              Jiang (2023), Liraglutide |         -6.400      -8.613      -4.187     20.29
+----------------------------------------+-------------------------------------------------
+                                  theta |         -8.091     -11.131      -5.051
+------------------------------------------------------------------------------------------
+95% prediction interval for theta: [-16.243, 0.061]
+
+Test of theta = 0: z = -5.22                                           Prob > |z| = 0.0000
+Test of homogeneity: Q = chi2(10) = 16.53                                Prob > Q = 0.0854
+
+. 
+. //TODO: FIGURE OUT HOW TO GET P-VALUE <0.001 RTATHER THAN 0.000 - may need to manuall edit. 
+. 
+. //Figure 3: RCTs Reporting AHI Difference and Percent Weight Loss
+. //subgrouping by intervention type and category. Requires manual editing of the labels - not sure why.
+. meta forestplot, random(reml) nullrefline(lcolor(gs3) favorsright("Favors control") favorsleft("Favors Intervention")) esrefline(lcolor(gs3) lpattern(dash_d
+> ot)) subgroup ( studycategory studysubcategory ) title("") note("") xtitle("Change in AHI (events/hr)")
+
+  Effect-size label: MD
+        Effect size: _meta_es
+          Std. err.: _meta_se
+        Study label: study_label
+
+. graph export "Results and Figures/$S_DATE/Figure 3- AHI Diff by Type and Intervention.png", as(png) name("Graph") replace
+file /Users/blocke/Box Sync/Residency Personal Files/MSCI/MDCRC 6200 SRMA/Results and Figures/ 5 Feb 2024/Figure 3- AHI Diff by Type and Intervention.png
+    saved as PNG format
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. 
+. //subgrouping by intervention: only used for text used for text and supplement figure S6.
+. //AHI Difference, Random-Effects Meta-analysis
+. //Figure Supplement
+. meta forestplot, random(reml) nullrefline(lcolor(gs3) favorsright("Favors control") favorsleft("Favors Intervention")) esrefline(lcolor(gs3) lpattern(dash_d
+> ot)) columnopts(_data, format(%4.1f)) subgroup ( interventiontype ) title("") note("")
+
+  Effect-size label: MD
+        Effect size: _meta_es
+          Std. err.: _meta_se
+        Study label: study_label
+
+. graph export "Results and Figures/$S_DATE/FigureS6 - AHI Diff by Intervention.png", as(png) name("Graph") replace
+file /Users/blocke/Box Sync/Residency Personal Files/MSCI/MDCRC 6200 SRMA/Results and Figures/ 5 Feb 2024/FigureS6 - AHI Diff by Intervention.png saved as
+    PNG format
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. 
+. //Following two figures are used only for outputs discussed in the text
+. //grouping by intervention class:  
+. //RCTs Reporting AHI Difference and Percent Weight Loss subtitle("Random-Effects Meta-analysis") 
+. meta forestplot, random(reml) nullrefline(lcolor(gs3) favorsright("Favors control") favorsleft("Favors Intervention")) esrefline(lcolor(gs3) lpattern(dash_d
+> ot)) columnopts(_data, format(%4.1f)) subgroup ( studysubcategory ) title("") note("") xtitle("Change in AHI (events/hr)")
+
+  Effect-size label: MD
+        Effect size: _meta_es
+          Std. err.: _meta_se
+        Study label: study_label
+
+. graph export "Results and Figures/$S_DATE/AHI Diff by Intervention Class.png", as(png) name("Graph") replace
+file /Users/blocke/Box Sync/Residency Personal Files/MSCI/MDCRC 6200 SRMA/Results and Figures/ 5 Feb 2024/AHI Diff by Intervention Class.png saved as PNG
+    format
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. 
+. // and by intervention type 
+. meta forestplot, random(reml) nullrefline(lcolor(gs3) favorsright("Favors control") favorsleft("Favors Intervention")) esrefline(lcolor(gs3) lpattern(dash_d
+> ot)) columnopts(_data, format(%4.1f)) subgroup ( studycategory ) title("") note("") xtitle("Change in AHI (events/hr)")
+
+  Effect-size label: MD
+        Effect size: _meta_es
+          Std. err.: _meta_se
+        Study label: study_label
+
+. graph export "Results and Figures/$S_DATE/AHI Diff by Intervention Type.png", as(png) name("Graph") replace
+file /Users/blocke/Box Sync/Residency Personal Files/MSCI/MDCRC 6200 SRMA/Results and Figures/ 5 Feb 2024/AHI Diff by Intervention Type.png saved as PNG
+    format
+
+. 
+. //Figure 2; main text
+. //RCTs Reporting AHI Difference and Percent Weight Loss, separated by 10% threshold; Random-Effects Meta-analysis
+. meta forestplot, random(reml) nooverall noohetstats noohomtest noosigtest nullrefline(lcolor(gs3)) columnopts(_data, format(%4.1f)) subgroup ( ten_perc_wt )
+>  title("") note("") xtitle("Change in AHI (events/hr)")
+
+  Effect-size label: MD
+        Effect size: _meta_es
+          Std. err.: _meta_se
+        Study label: study_label
+
+. graph export "Results and Figures/$S_DATE/Figure 2 AHI Diff by 10 Perc Wt Loss.png", as(png) name("Graph") replace
+file /Users/blocke/Box Sync/Residency Personal Files/MSCI/MDCRC 6200 SRMA/Results and Figures/ 5 Feb 2024/Figure 2 AHI Diff by 10 Perc Wt Loss.png saved as
+    PNG format
+
+. 
+end of do-file
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. 
+. gen ahi_diff_es = _meta_es * -1 // for plots and scatters
+
+. gen ahi_diff_effect = _meta_es //for the Lowess 
+
+. 
+. 
+. //Dumbell plot - Starting to ending AHI mean. Not Used currently. 
+. /*
+> sort intbaselineahimean, stable
+>  generate srno = _n * 3
+>  labmask srno, values(study_label)
+>  colorpalette w3, nograph
+>  twoway  (rspike intbaselineahimean intfinalahimean srno, horizontal lcolor("`r(p6)'*0.4")) ///
+>    (scatter srno intbaselineahimean, mcolor("`r(p6)'*0.4")) ///
+>    (scatter srno intfinalahimean, mcolor("`r(p6)'")) ///
+>    , ///
+>    ylabel(3(3)33, valuelabel angle(horizontal) labsize(2)) ///
+>    legend(order(3 "Follow-up AHI" 2 "Randomization AHI") pos(11) row(1) size(2)) ///
+>    ytitle("") ///
+>    title("Intervention Arm", pos(11) size(2.75)) ///
+>    subtitle("Mean or Medians", pos(11) size(2)) ///
+>    xlabel(0(10)60) ///
+>    b1title("Average AHI (events/hr)", size("small")) ///
+>    scheme(white_tableau) name(intervention_ahis, replace)
+>    
+>  colorpalette w3, nograph
+>  twoway  (rspike controlbaselineahimeanorme controlfinalahimeanormedia srno, horizontal lcolor("`r(p3)'*0.4")) ///
+>    (scatter srno controlbaselineahimeanorme, mcolor("`r(p3)'*0.4")) ///
+>    (scatter srno controlfinalahimeanormedia, mcolor("`r(p3)'")) ///
+>    , ///
+>    ylabel(3(3)33, valuelabel angle(horizontal) labsize(2)) ///
+>    legend(order(3 "Follow-up AHI" 2 "Randomization AHI") pos(11) row(1) size(2)) ///
+>    ytitle("") ///
+>    title("Control Arm", pos(11) size(2.75)) ///
+>    subtitle("Mean or Medians", pos(11) size(2)) ///
+>    xlabel(0(10)60) ///
+>    b1title("Average AHI (events/hr)", size("small")) ///
+>    scheme(white_tableau) name(obs_ahis, replace)
+>    
+> graph combine intervention_ahis obs_ahis, ycommon title("{bf}Change in Apnea Hypopnea Index (AHI)", pos(11) size(2.75)) xsize(7) ysize(4)
+> graph export "Results and Figures/$S_DATE/Dumbell Plot - AHI.png", as(png) name("Graph") replace
+> */   
+. 
+. 
+. meta galbraithplot, random(reml) scheme(cleanplots) // TODO: by surgery vs medicine? would be good to somehow account for weight as well
+
+  Effect-size label: MD
+        Effect size: _meta_es
+          Std. err.: _meta_se
+              Model: Random effects
+             Method: REML
+
+. 
+. //MAIN META-REGRESSION
+. meta regress int_wt_loss_effect, random(reml) se(kh)
+
+  Effect-size label: MD
+        Effect size: _meta_es
+          Std. err.: _meta_se
+
+Random-effects meta-regression                      Number of obs  =        11
+Method: REML                                        Residual heterogeneity:
+SE adjustment: Knapp–Hartung                                    tau2 = 2.8e-08
+                                                              I2 (%) =    0.00
+                                                                  H2 =    1.00
+                                                       R-squared (%) =  100.00
+                                                    Model F(1,9)   =     15.46
+                                                    Prob > F       =    0.0034
+------------------------------------------------------------------------------------
+          _meta_es | Coefficient  Std. err.      t    P>|t|     [95% conf. interval]
+-------------------+----------------------------------------------------------------
+int_wt_loss_effect |  -.4359419   .1108806    -3.93   0.003    -.6867711   -.1851127
+             _cons |  -4.357626   .9035893    -4.82   0.001    -6.401688   -2.313565
+------------------------------------------------------------------------------------
+Test of residual homogeneity: Q_res = chi2(9) =  6.08    Prob > Q_res = 0.7316
+
+. estimates store baseline_model
+
+. estat summarize, equation
+
+  Estimation sample meta regress           Number of obs =         11
+
+  -------------------------------------------------------------------
+      Variable |         Mean      Std. dev.         Min          Max
+  -------------+-----------------------------------------------------
+  depvar       |
+      _meta_es |      -6.7407      5.721299        -18.2         -1.9
+  -------------+-----------------------------------------------------
+  _            |
+  int_wt_los~t |     5.466493      10.43352     1.290323     33.46505
+  -------------+-----------------------------------------------------
+       _weight |      .136818        .22906     .0233604     .7846392
+  -------------------------------------------------------------------
+
+. estat ic //this doesn't have info needed to calculate AIC and BIC -> no log likelihood. why?
+
+Akaike's information criterion and Bayesian information criterion
+
+-----------------------------------------------------------------------------
+       Model |          N   ll(null)  ll(model)      df        AIC        BIC
+-------------+---------------------------------------------------------------
+baseline_m~l |         11          .          .      -1          .          .
+-----------------------------------------------------------------------------
+Note: BIC uses N = number of observations. See [R] IC note.
+
+. 
+. //Some of the testing for linear regression assumptions
+. predict r, resid
+
+. //normality
+. kdensity r, normal
+(n() set to 11)
+
+. pnorm r
+
+. qnorm r
+
+. //linearity 
+. scatter r int_wt_loss_effect //- visual inspection .. hard to tell
+
+. 
+. /* Supplement Estimates of Effectiveness of Various Interventions */ 
+. //Vertical sleeve gastrectomy
+. adjust int_wt_loss_effect=25, ci level(95) // from NEJM review
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+     Dependent variable: _meta_es     Command: meta regress
+ Covariate set to value: int_wt_los~t = 25
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+----------------------------------------------
+      All |         xb          lb          ub
+----------+-----------------------------------
+          |   -15.2562   [-20.3849   -10.1274]
+----------------------------------------------
+     Key:  xb         =  Linear Prediction
+           [lb , ub]  =  [95% Confidence Interval]
+
+. 
+. //Tirzepitide weight loss SURMOUNT trial 
+. adjust int_wt_loss_effect=20.9, ci level(95) //confidence interval - - 20.9% weight loss Tirzepitde 15mg
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+     Dependent variable: _meta_es     Command: meta regress
+ Covariate set to value: int_wt_los~t = 20.9
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+----------------------------------------------
+      All |         xb          lb          ub
+----------+-----------------------------------
+          |   -13.4688   [-17.6262    -9.3114]
+----------------------------------------------
+     Key:  xb         =  Linear Prediction
+           [lb , ub]  =  [95% Confidence Interval]
+
+. //adjust int_wt_loss_effect=20.9, stdf ci level(95) //prediction interval - Invalid? :( - Not sure I understand why. 
+. 
+. //Semaglutide weight loss -
+. adjust int_wt_loss_effect=10.8, ci level(95) //from AGA guideline
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+     Dependent variable: _meta_es     Command: meta regress
+ Covariate set to value: int_wt_los~t = 10.8
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+----------------------------------------------
+      All |         xb          lb          ub
+----------+-----------------------------------
+          |    -9.0658   [-11.0876   -7.04396]
+----------------------------------------------
+     Key:  xb         =  Linear Prediction
+           [lb , ub]  =  [95% Confidence Interval]
+
+. adjust int_wt_loss_effect=12.1, ci level(95) //from Semaglutide Treatment Effect in People With Obesity (STEP) trial: 12% weight loss
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+     Dependent variable: _meta_es     Command: meta regress
+ Covariate set to value: int_wt_los~t = 12.1
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+----------------------------------------------
+      All |         xb          lb          ub
+----------+-----------------------------------
+          |   -9.63252   [-11.8834   -7.38161]
+----------------------------------------------
+     Key:  xb         =  Linear Prediction
+           [lb , ub]  =  [95% Confidence Interval]
+
+. 
+. //Naltrexone-Bupriopion
+. adjust int_wt_loss_effect=3.0, ci level(95) //from AGA guideline
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+     Dependent variable: _meta_es     Command: meta regress
+ Covariate set to value: int_wt_los~t = 3
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+----------------------------------------------
+      All |         xb          lb          ub
+----------+-----------------------------------
+          |   -5.66545   [-7.30279   -4.02812]
+----------------------------------------------
+     Key:  xb         =  Linear Prediction
+           [lb , ub]  =  [95% Confidence Interval]
+
+. 
+. //Orlistat & Galesis-100
+. adjust int_wt_loss_effect=2.0, ci level(95) //from AGA guideline
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+     Dependent variable: _meta_es     Command: meta regress
+ Covariate set to value: int_wt_los~t = 2
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+----------------------------------------------
+      All |         xb          lb          ub
+----------+-----------------------------------
+          |   -5.22951   [-6.97712    -3.4819]
+----------------------------------------------
+     Key:  xb         =  Linear Prediction
+           [lb , ub]  =  [95% Confidence Interval]
+
+. 
+. 
+. //FIGURE 4: title("Meta-regression of RCTs of Anti-Obesity Interventions") 
+. estat bubbleplot, reweighted ytitle("AHI change (events/hr)") xtitle("Percent weight change(%)") title("") note("") mlabel(study_label) mlabsize(vsmall) mla
+> bposition(6) mlabangle(25) xline(0, lcolor(gs10)) yline(0, lcolor(gs10)) scheme(white_tableau) legend(order(1 "95% CI" 3 "Meta-regression line") rows(3) pos
+> (6) ring(0)) 
+
+. graph export "Results and Figures/$S_DATE/Figure 4- Wt Loss v AHI Diff Meta Regress.png", as(png) name("Graph") replace
+file /Users/blocke/Box Sync/Residency Personal Files/MSCI/MDCRC 6200 SRMA/Results and Figures/ 5 Feb 2024/Figure 4- Wt Loss v AHI Diff Meta Regress.png
+    saved as PNG format
+
+. 
+end of do-file
+
+. help meta forest
+
+. do "/var/folders/vf/n84t7b8171lf64smq4ddvw1m0000gn/T//SD85335.000000"
+
+. meta forestplot, random(reml) nooverall noohetstats noohomtest noosigtest nullrefline(lcolor(gs3)) columnopts(_data, format(%4.1f)) subgroup ( ten_perc_wt )
+>  title("") note("") xtitle("Change in AHI (events/hr)")
+
+  Effect-size label: MD
+        Effect size: _meta_es
+          Std. err.: _meta_se
+        Study label: study_label
+
+. graph export "Results and Figures/$S_DATE/Figure 2 AHI Diff by 10 Perc Wt Loss.png", as(png) name("Graph") replace
+file /Users/blocke/Box Sync/Residency Personal Files/MSCI/MDCRC 6200 SRMA/Results and Figures/ 5 Feb 2024/Figure 2 AHI Diff by 10 Perc Wt Loss.png saved as
+    PNG format
+
+. 
+end of do-file
+
+. exit, clear
