@@ -1,0 +1,14 @@
+{
+  "hash": "b6fc495b40fe60a5962226e7ff6dcefe",
+  "result": {
+    "markdown": "---\ntitle: \"O2 Target Meta-Analysis\"\noutput: html\nembed-resources: true\neditor_options: \n  chunk_output_type: console\n\nknitr:\n  opts_knit:\n    root.dir: \"/Users/reblocke/Box Sync/Residency Personal Files/Stats/O2 Target Meta-Analysis/data\"\n---\n\n\n## Oxygen targets in ICU patients\n\nThis workbook synthesizes the available evidence on oxygen targets in the ICU. \n\nThe aim of this project is to take the 'outside view' of the data to predict the results and interpretation of the ongiong Mega-Rox trial.\n\n\n::: {.cell}\n\n```{.r .cell-code}\nlibrary(readxl)\nsetwd(\"/Users/reblocke/Box Sync/Residency Personal Files/Stats/O2 Target Meta-Analysis/data\")\ndata <- read_excel(\"O2 icu target MA.xls\")\nview(data)\n```\n:::\n",
+    "supporting": [],
+    "filters": [
+      "rmarkdown/pagebreak.lua"
+    ],
+    "includes": {},
+    "engineDependencies": {},
+    "preserve": {},
+    "postProcess": true
+  }
+}
