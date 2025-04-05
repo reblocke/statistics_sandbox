@@ -1,0 +1,125 @@
+---
+title: "O2 Target Meta-Analysis"
+output: html
+embed-resources: true
+editor_options: 
+  chunk_output_type: console
+---
+
+## Oxygen targets in ICU patients
+
+This workbook synthesizes the available evidence on oxygen targets in the ICU. 
+
+The aim of this project is to take the 'outside view' of the data to predict the results and interpretation of the ongiong Mega-Rox trial.
+
+Note: my presupposition is that there is not relative effect modification 
+
+```{r}
+#| eval: false
+#| label: Pull in Data Extraction Spreadsheet
+library(readxl)
+library(tidyverse)
+# Mac Version
+setwd("/Users/blocke/Box Sync/Residency Personal Files/Stats/O2 Target Meta-Analysis") 
+
+# PC Version
+#setwd('C:\\Users\\reblo\\Box\\Residency Personal Files\\Stats\\O2 Target Meta-Analysis\\') #[ ] figure out how to make this a global
+
+data_sheet <- read_excel("data/O2 icu target MA.xls") |> 
+  select(-other_comment) |>  # drop other comment column
+  arrange(year) # arrange by year (needed for TSA) 
+
+head(data_sheet)
+authors <- select(data_sheet, author)
+```
+
+
+## Data Extraction tables
+
+[ ] todo: 
+please double check me if any of my extractions are erroneous.
+
+## Meta-analysis
+
+### Random effects meta-analysis using the meta package
+
+```{r}
+library(meta)
+
+#metabin takes events, total (rather than events, nonevents)
+m_ex1 <- meta::metabin(low_o2_died, num_low_o2, high_o2_died, num_high_o2, data = data_sheet, studlab = paste(name, author, year), sm = "OR")
+meta::forest(m_ex1, comb.random = FALSE, lab.c = "High Oxygen", lab.e = "Low Oxygen", label.left = "Favors Low O2", label.right = "Favors High O2")
+
+```
+
+### Random effects meta-analysis using the metafor package
+
+Using Mantel Haenszel Estimator
+
+```{r}
+library(metafor)
+#this one takes the events and non-events
+m4_ex1 <- rma.mh(low_o2_died, low_o2_alive, high_o2_died, high_o2_alive, data = data_sheet, slab = paste(author, year, sep = ", "))
+forest(m4_ex1, transf = exp, showweights = TRUE, refline = 1, header = "Author and Year", shade = "zebra", ilab=cbind(low_o2_died, low_o2_alive, high_o2_died, high_o2_alive))
+
+```
+
+### Funnel plot
+
+Nothing in particular suspicious about this
+```{r}
+funnel(m_ex1) # this one will take either metafor or meta object
+
+metabias(m_ex1, k.min=5) # note: this one takes meta, not metafor object
+
+```
+
+## Trial Sequential Analysis
+
+Note: this analysis remains finicky for reasons I don't understand yet. 
+
+0However, running for an expected 10% RRR, we can say that futility has already been met (ie, further data is unlikely to the usual 5% type 1 error rate to change the assessment that there is not a 10% RRR)
+
+However, much more likely - if there is an effect it is much, much smaller (e.g. 1-3%), but that this would still be HUGELY important, as realistically there is no known downside to a different oxygen target within the range being tested, and thus ANY real mortality benefit would be important. Hence, the MEGA-ROX trial is important and warranted. 
+
+```{r}
+library(RTSA)
+# library(ldbounds)
+
+
+# Have to rename columns such that there is: 
+# ‘eI‘(eventsininterventiongroup), ‘eC‘(eventsincontrolgroup),‘nC‘(participantsinterventiongroup)or‘nI‘ (participantscontrolgroup)fordiscretedata
+
+rtsa_df <- data_sheet |> 
+  rename("eI" = high_o2_died, 
+         "eC" = low_o2_died, 
+         "nI" = num_high_o2,
+         "nC" = num_low_o2, 
+         "study" = name)
+
+map(rtsa_df, class)
+sapply(rtsa_df, function(x) which(is.na(x)))
+
+
+an_rtsa <- RTSA(type="analysis", data =  rtsa_df , outcome = "RR", mc = 0.9, side = 2,  alpha = 0.05, beta = 0.1, es_alpha = "esOF", es_beta = "esOF", futility = "non-binding", random_adj = "D2", D2 = 0.25 )
+
+#an_rtsa <- RTSA(type = "analysis", data = rtsa_df, outcome = "OR", side = 2, es_alpha = "esOF", es_beta = "esOF", fixed = FALSE, re_method = "DL_HKSJ", alpha = 0.05, beta = 0.1, random_adj = "D2", D2 = 0.25, mc = 0.02)
+plot(an_rtsa)
+
+
+```
+
+
+> setwd("C:\\Users\\reblo\\Box\\Residency Personal Files\\MSCI\\MDCRC 6200 SRMA\\O2 TargetMeta-anlysis")
+> t <- c(.0543122962117195, .0672617554664612, .1218254938721657, .1299974918365479, .1450842320919037, .2664068341255188, .2916771471500397
+> , .6547648906707764, .7050540447235107, .9165199995040894, 1)
+> obf.bd <- ldBounds( t, iuse = 1, alpha = .025) 
+> obf = data.frame( t_bd = obf.bd$time, UB_bd = obf.bd$upper.bounds)
+> write.dta(obf,"bounds.dta")
+
+
+## Network Meta-analysis
+
+
+## Expected Results of the MEGA-ROX trial. 
+

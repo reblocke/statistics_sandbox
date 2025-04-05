@@ -1,0 +1,83 @@
+---
+title: "O2 Target Meta-Analysis"
+output: html
+embed-resources: true
+editor_options: 
+  chunk_output_type: console
+---
+
+## Oxygen targets in ICU patients
+
+This workbook synthesizes the available evidence on oxygen targets in the ICU. 
+
+The aim of this project is to take the 'outside view' of the data to predict the results and interpretation of the ongiong Mega-Rox trial.
+
+Note: my presupposition is that there is not relative effect modification 
+
+```{r}
+#| eval: false
+#| label: Pull in Data Extraction Spreadsheet
+library(readxl)
+library(tidyverse)
+setwd("/Users/reblocke/Box Sync/Residency Personal Files/Stats/O2 Target Meta-Analysis/") #[ ] figure out how to make this a global
+data <- read_excel("data/O2 icu target MA.xls") |> 
+  select(-other_comment) |>  # drop other comment column
+  arrange(year) # arrange by year (needed for TSA) 
+
+head(data)
+authors <- select(data, author)
+
+```
+
+The following are tests of accessing the data in the table... 
+Three main types: numeric (double, integer), logical, and character
+
+```{r}
+class(data)
+class(data$Author)
+typeof(data$NumRandomized)
+class(data$NumRandomized)
+```
+unrelated tests
+```{r}
+my_vector1 = c("a", TRUE, 1)
+my_vector1
+class(my_vector1)
+typeof(my_vector1)
+as.numeric(my_vector1) # this 'works' but resolves to NA
+my_vector2 = c(0, TRUE, FALSE)
+my_vector2
+class(my_vector2)
+typeof(my_vector2)
+my_vector3 = c("0", "2 ", "4")
+as.numeric(my_vector3) # this works OK 
+my_vector4 = c(TRUE, FALSE, FALSE)
+as.character(as.numeric(my_vector4))
+df <- data.frame(my_vector1, my_vector2, my_vector3, my_vector4)
+str(df)
+```
+Interestingly enough 
+
+```{r}
+
+x <- c(5.4, 6.2, 7.1, 4.8, 7.5)
+names(x) <- c('a', 'b', 'c', 'd', 'e')
+
+x[x > 4 | x < 7]
+
+
+```
+
+
+
+Note: this is the STATA metacumbbounds input 
+
+> library(ldbounds)
+> library(foreign)
+> setwd("C:\\Users\\reblo\\Box\\Residency Personal Files\\MSCI\\MDCRC 6200 SRMA\\O2 TargetMeta-anlysis")
+> t <- c(.0543122962117195, .0672617554664612, .1218254938721657, .1299974918365479, .1450842320919037, .2664068341255188, .2916771471500397
+> , .6547648906707764, .7050540447235107, .9165199995040894, 1)
+> obf.bd <- ldBounds( t, iuse = 1, alpha = .025) 
+> obf = data.frame( t_bd = obf.bd$time, UB_bd = obf.bd$upper.bounds)
+> write.dta(obf,"bounds.dta")
+
