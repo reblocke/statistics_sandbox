@@ -1,0 +1,1434 @@
+---
+title: "Medicaid Provider Spending EDA (DuckDB + Python)"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Show code"
+    fig-width: 10
+    fig-height: 5
+    df-print: paged
+execute:
+  echo: true
+  warning: false
+  message: false
+  error: false
+jupyter: hypercap-cc-nlp
+---
+
+## Purpose
+
+This notebook performs SQL-first exploratory data analysis (EDA) on `medicaid-provider-spending.parquet` using DuckDB.
+It is designed for a large file and keeps memory use low by:
+
+1. Reading parquet lazily through DuckDB.
+2. Aggregating in SQL first.
+3. Moving only small summary tables to pandas for plotting.
+
+```{python}
+from pathlib import Path
+import re
+import random
+from typing import Optional
+
+import duckdb
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pyarrow as pa
+
+# Deterministic seed
+RANDOM_SEED = 42
+random.seed(RANDOM_SEED)
+np.random.seed(RANDOM_SEED)
+
+# Notebook parameters/constants
+NOTEBOOK_DIR = Path.cwd()
+DATA_PATH = NOTEBOOK_DIR / "medicaid-provider-spending.parquet"
+FIG_DIR = NOTEBOOK_DIR / "figures"
+OUTPUT_DIR = NOTEBOOK_DIR / "outputs"
+FIG_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+PRIMARY_SPEND_CANDIDATES = [
+    "total_spending",
+    "total_payment",
+    "total_paid",
+    "amount_paid",
+    "payment_amount",
+    "spending_amount",
+    "medicaid_spending",
+]
+TOP_N = 20
+MIN_VOLUME_FILTER = 11
+TARGET_NPI = "1295199313"
+NPI_SCOPE = "either"
+HCPCS_TOP_N = 20
+MIN_HCPCS_CLAIMS_FOR_CPP = 1000
+
+# Known schema column names for NPI-specific analysis.
+BILLING_NPI_COL = "BILLING_PROVIDER_NPI_NUM"
+SERVICING_NPI_COL = "SERVICING_PROVIDER_NPI_NUM"
+MONTH_COL = "CLAIM_FROM_MONTH"
+HCPCS_COL = "HCPCS_CODE"
+CLAIMS_COL = "TOTAL_CLAIMS"
+PAID_COL = "TOTAL_PAID"
+
+sns.set_theme(style="whitegrid")
+plt.rcParams["figure.dpi"] = 110
+
+
+def qident(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def is_numeric_duckdb_type(type_name: str) -> bool:
+    t = str(type_name).upper()
+    numeric_markers = (
+        "TINYINT",
+        "SMALLINT",
+        "INTEGER",
+        "BIGINT",
+        "HUGEINT",
+        "UTINYINT",
+        "USMALLINT",
+        "UINTEGER",
+        "UBIGINT",
+        "UHUGEINT",
+        "FLOAT",
+        "DOUBLE",
+        "REAL",
+        "DECIMAL",
+    )
+    return any(marker in t for marker in numeric_markers)
+
+
+def detect_column_roles(schema_df: pd.DataFrame) -> dict[str, list[str]]:
+    """
+    Detect semantic roles from column names and SQL types.
+    Returns role -> list of candidate column names.
+    """
+    patterns = {
+        "provider_id": re.compile(r"(?:^|_)(npi|provider(_id)?|prov(_id)?|prescriber|billing)(?:$|_)", re.I),
+        "year": re.compile(r"(?:^|_)(year|yr|fiscal_year|calendar_year)(?:$|_)", re.I),
+        "date": re.compile(r"(?:^|_)(date|month|quarter|period|service_date)(?:$|_)", re.I),
+        "geo": re.compile(r"(?:^|_)(state|county|zip|zipcode|fips|region|city)(?:$|_)", re.I),
+        "spend": re.compile(r"(?:^|_)(spend|payment|paid|allowed|reimb|charge|cost|amount|total)(?:$|_)", re.I),
+        "volume": re.compile(r"(?:^|_)(claim|service|visit|encounter|beneficiary|bene|member|patient|count|volume|utilization)(?:$|_)", re.I),
+        "specialty": re.compile(r"(?:^|_)(specialty|provider_type|prvdr_type)(?:$|_)", re.I),
+        "taxonomy": re.compile(r"(?:^|_)(taxonomy)(?:$|_)", re.I),
+        "id": re.compile(r"(?:^|_)(id|identifier|key)(?:$|_)", re.I),
+    }
+
+    roles: dict[str, list[str]] = {key: [] for key in patterns}
+    roles["numeric"] = []
+    roles["categorical"] = []
+
+    for row in schema_df.itertuples(index=False):
+        col = str(row.column_name)
+        col_type = str(row.column_type)
+        col_lower = col.lower()
+
+        if is_numeric_duckdb_type(col_type):
+            roles["numeric"].append(col)
+        else:
+            roles["categorical"].append(col)
+
+        for role, pattern in patterns.items():
+            if pattern.search(col_lower):
+                roles[role].append(col)
+
+    # De-duplicate while preserving order
+    for k, v in roles.items():
+        roles[k] = list(dict.fromkeys(v))
+
+    return roles
+
+
+def first_existing(candidates: list[str], all_columns: list[str]) -> Optional[str]:
+    for c in candidates:
+        if c in all_columns:
+            return c
+    return None
+
+
+def safe_ratio(numerator: float, denominator: float) -> float:
+    if denominator is None or pd.isna(denominator) or denominator == 0:
+        return np.nan
+    return float(numerator) / float(denominator)
+
+
+def build_provider_long_view(scope: str, source_relation: str = "medicaid_spending") -> str:
+    scope = scope.lower()
+    if scope not in {"either", "billing", "servicing"}:
+        raise ValueError(f"Unsupported scope: {scope}")
+
+    billing_select = f"""
+        SELECT
+            CAST({qident(BILLING_NPI_COL)} AS VARCHAR) AS provider_npi,
+            CAST({qident(MONTH_COL)} AS VARCHAR) AS claim_month,
+            CAST({qident(HCPCS_COL)} AS VARCHAR) AS hcpcs_code,
+            TRY_CAST({qident(CLAIMS_COL)} AS DOUBLE) AS total_claims,
+            TRY_CAST({qident(PAID_COL)} AS DOUBLE) AS total_paid,
+            'billing' AS provider_role
+        FROM {source_relation}
+        WHERE {qident(BILLING_NPI_COL)} IS NOT NULL
+    """
+
+    servicing_select = f"""
+        SELECT
+            CAST({qident(SERVICING_NPI_COL)} AS VARCHAR) AS provider_npi,
+            CAST({qident(MONTH_COL)} AS VARCHAR) AS claim_month,
+            CAST({qident(HCPCS_COL)} AS VARCHAR) AS hcpcs_code,
+            TRY_CAST({qident(CLAIMS_COL)} AS DOUBLE) AS total_claims,
+            TRY_CAST({qident(PAID_COL)} AS DOUBLE) AS total_paid,
+            'servicing' AS provider_role
+        FROM {source_relation}
+        WHERE {qident(SERVICING_NPI_COL)} IS NOT NULL
+    """
+
+    if scope == "billing":
+        return billing_select
+    if scope == "servicing":
+        return servicing_select
+
+    return f"""
+        {billing_select}
+        UNION ALL
+        {servicing_select}
+          AND ({qident(BILLING_NPI_COL)} IS NULL OR {qident(SERVICING_NPI_COL)} <> {qident(BILLING_NPI_COL)})
+    """
+
+
+print("Python:", pd.__version__)
+print("DuckDB:", duckdb.__version__)
+print("PyArrow:", pa.__version__)
+print("Data path:", DATA_PATH)
+print("Data exists:", DATA_PATH.exists())
+```
+
+## Ingestion Layer (DuckDB View)
+
+```{python}
+assert DATA_PATH.exists(), f"Data file not found: {DATA_PATH}"
+
+con = duckdb.connect(database=":memory:")
+con.execute("PRAGMA threads=4;")
+parquet_path_sql = str(DATA_PATH).replace("'", "''")
+con.execute(f"CREATE OR REPLACE VIEW medicaid_spending AS SELECT * FROM read_parquet('{parquet_path_sql}');")
+
+row_count = int(con.execute("SELECT COUNT(*) AS n FROM medicaid_spending").fetchdf().loc[0, "n"])
+assert row_count > 0, "Ingestion check failed: row count must be > 0"
+
+schema_df = con.execute("DESCRIBE SELECT * FROM medicaid_spending").fetchdf()
+schema_df = schema_df.rename(columns={"column_name": "column_name", "column_type": "column_type"})
+all_cols = schema_df["column_name"].tolist()
+roles = detect_column_roles(schema_df)
+
+print(f"Rows: {row_count:,}")
+print(f"Columns: {len(all_cols)}")
+schema_df.head(20)
+```
+
+```{python}
+role_rows = []
+for role_name in ["provider_id", "year", "date", "geo", "spend", "volume", "specialty", "taxonomy", "id"]:
+    role_rows.append(
+        {
+            "role": role_name,
+            "n_candidates": len(roles.get(role_name, [])),
+            "candidates": ", ".join(roles.get(role_name, [])[:10]),
+        }
+    )
+role_df = pd.DataFrame(role_rows)
+role_df
+```
+
+```{python}
+numeric_cols = roles.get("numeric", [])
+categorical_cols = roles.get("categorical", [])
+
+primary_spend_col = None
+lower_to_col = {c.lower(): c for c in all_cols}
+for candidate in PRIMARY_SPEND_CANDIDATES:
+    if candidate in lower_to_col and lower_to_col[candidate] in numeric_cols:
+        primary_spend_col = lower_to_col[candidate]
+        break
+
+if primary_spend_col is None:
+    spend_numeric_candidates = [c for c in roles.get("spend", []) if c in numeric_cols]
+    primary_spend_col = spend_numeric_candidates[0] if spend_numeric_candidates else None
+
+provider_col = first_existing(roles.get("provider_id", []) + roles.get("id", []), all_cols)
+year_col = first_existing(roles.get("year", []) + roles.get("date", []), all_cols)
+volume_col = first_existing([c for c in roles.get("volume", []) if c in numeric_cols], all_cols)
+
+print("Selected analysis columns:")
+print("  primary_spend_col:", primary_spend_col)
+print("  provider_col     :", provider_col)
+print("  year_col         :", year_col)
+print("  volume_col       :", volume_col)
+print("  numeric_cols     :", len(numeric_cols))
+print("  categorical_cols :", len(categorical_cols))
+
+# Runtime cap for heavy aggregations that otherwise require full-table grouping.
+HEAVY_QUERY_SAMPLE_ROWS = int(min(row_count, 500_000))
+print("  heavy_query_sample_rows:", HEAVY_QUERY_SAMPLE_ROWS)
+
+required_hcpcs_cols = [HCPCS_COL, CLAIMS_COL, PAID_COL]
+required_npi_cols = [BILLING_NPI_COL, SERVICING_NPI_COL, MONTH_COL, HCPCS_COL, CLAIMS_COL, PAID_COL]
+has_required_hcpcs_cols = all(c in all_cols for c in required_hcpcs_cols)
+has_required_npi_cols = all(c in all_cols for c in required_npi_cols)
+print("  has_required_hcpcs_cols:", has_required_hcpcs_cols)
+print("  has_required_npi_cols  :", has_required_npi_cols)
+
+# Cross-section status flags used in final validation checks.
+hcpcs_rankings_generated = False
+npi_present_in_data = False
+npi_section_completed = False
+```
+
+## Data Quality Diagnostics
+
+### Missingness (% Missing by Column)
+
+```{python}
+missing_exprs = [
+    f"SUM(CASE WHEN {qident(c)} IS NULL THEN 1 ELSE 0 END) AS {qident(c)}"
+    for c in all_cols
+]
+missing_sql = "SELECT " + ", ".join(missing_exprs) + ", COUNT(*) AS total_rows FROM medicaid_spending"
+missing_wide = con.execute(missing_sql).fetchdf()
+
+total_rows = int(missing_wide.loc[0, "total_rows"])
+missing_long = (
+    missing_wide.drop(columns=["total_rows"])
+    .T.reset_index()
+    .rename(columns={"index": "column_name", 0: "missing_n"})
+)
+missing_long["missing_n"] = missing_long["missing_n"].astype("int64")
+missing_long["pct_missing"] = (100.0 * missing_long["missing_n"] / total_rows).astype(float)
+missing_long = missing_long.sort_values("pct_missing", ascending=False)
+
+assert missing_long["pct_missing"].between(0, 100).all(), "Missingness must be in [0, 100]"
+
+missing_top30 = missing_long.head(30).reset_index(drop=True)
+missing_top30.to_csv(OUTPUT_DIR / "missingness_top30.csv", index=False)
+missing_top30
+```
+
+### Cardinality (Categorical Columns)
+
+```{python}
+if len(categorical_cols) == 0:
+    print("Skipped: no categorical columns detected.")
+    cardinality_top30 = pd.DataFrame()
+else:
+    # Cardinality can be expensive on a very large file; use a tighter bounded sample.
+    card_cols = categorical_cols[:20]
+    cardinality_sample_rows = int(min(row_count, 200_000))
+    card_exprs = [f"APPROX_COUNT_DISTINCT({qident(c)}) AS {qident(c)}" for c in card_cols]
+    card_sql = (
+        "SELECT "
+        + ", ".join(card_exprs)
+        + f" FROM medicaid_spending USING SAMPLE {cardinality_sample_rows} ROWS (reservoir)"
+    )
+    card_wide = con.execute(card_sql).fetchdf()
+
+    cardinality_long = (
+        card_wide.T.reset_index()
+        .rename(columns={"index": "column_name", 0: "approx_distinct"})
+        .sort_values("approx_distinct", ascending=False)
+    )
+    cardinality_long["sample_rows_used"] = cardinality_sample_rows
+    cardinality_top30 = cardinality_long.head(30).reset_index(drop=True)
+    cardinality_top30.to_csv(OUTPUT_DIR / "categorical_cardinality_top30.csv", index=False)
+    cardinality_top30
+```
+
+### Duplicate Checks (Provider/Time Keys)
+
+```{python}
+if provider_col is None:
+    print("Skipped: no provider identifier candidate detected.")
+    duplicate_summary = pd.DataFrame()
+    duplicate_examples = pd.DataFrame()
+else:
+    if year_col is not None:
+        dup_sql = f"""
+        WITH base AS (
+            SELECT
+                CAST({qident(provider_col)} AS VARCHAR) AS provider_id,
+                CAST({qident(year_col)} AS VARCHAR) AS period
+            FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+        )
+        SELECT
+            COUNT(*) AS total_rows,
+            COUNT(DISTINCT provider_id) AS distinct_providers,
+            COUNT(DISTINCT provider_id || '|' || COALESCE(period, 'NULL')) AS distinct_provider_period,
+            COUNT(*) - COUNT(DISTINCT provider_id || '|' || COALESCE(period, 'NULL')) AS duplicate_provider_period_rows
+        FROM base
+        """
+        duplicate_summary = con.execute(dup_sql).fetchdf()
+
+        dup_examples_sql = f"""
+        WITH base AS (
+            SELECT
+                CAST({qident(provider_col)} AS VARCHAR) AS provider_id,
+                CAST({qident(year_col)} AS VARCHAR) AS period
+            FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+        )
+        SELECT provider_id, period, COUNT(*) AS n_rows
+        FROM base
+        GROUP BY 1, 2
+        HAVING COUNT(*) > 1
+        ORDER BY n_rows DESC
+        LIMIT 20
+        """
+        duplicate_examples = con.execute(dup_examples_sql).fetchdf()
+    else:
+        dup_sql = f"""
+        SELECT
+            COUNT(*) AS total_rows,
+            COUNT(DISTINCT CAST({qident(provider_col)} AS VARCHAR)) AS distinct_providers,
+            COUNT(*) - COUNT(DISTINCT CAST({qident(provider_col)} AS VARCHAR)) AS duplicate_provider_rows
+        FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+        """
+        duplicate_summary = con.execute(dup_sql).fetchdf()
+
+        dup_examples_sql = f"""
+        SELECT
+            CAST({qident(provider_col)} AS VARCHAR) AS provider_id,
+            COUNT(*) AS n_rows
+        FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+        GROUP BY 1
+        HAVING COUNT(*) > 1
+        ORDER BY n_rows DESC
+        LIMIT 20
+        """
+        duplicate_examples = con.execute(dup_examples_sql).fetchdf()
+
+    duplicate_summary.to_csv(OUTPUT_DIR / "duplicate_key_summary.csv", index=False)
+    duplicate_examples.to_csv(OUTPUT_DIR / "duplicate_key_examples_top20.csv", index=False)
+    duplicate_summary
+```
+
+```{python}
+if provider_col is not None:
+    duplicate_examples
+```
+
+### Numeric Sanity Checks
+
+```{python}
+numeric_focus = list(dict.fromkeys(roles.get("spend", []) + roles.get("volume", [])))
+numeric_focus = [c for c in numeric_focus if c in all_cols][:20]
+if not numeric_focus:
+    numeric_focus = numeric_cols[:12]
+
+if len(numeric_focus) == 0:
+    print("Skipped: no numeric columns detected.")
+    numeric_sanity = pd.DataFrame()
+else:
+    sanity_exprs = []
+    for c in numeric_focus:
+        c_id = qident(c)
+        sanity_exprs.extend(
+            [
+                f"MIN(TRY_CAST({c_id} AS DOUBLE)) AS {qident(c + '__min')}",
+                f"MAX(TRY_CAST({c_id} AS DOUBLE)) AS {qident(c + '__max')}",
+                f"AVG(CASE WHEN TRY_CAST({c_id} AS DOUBLE) < 0 THEN 1 ELSE 0 END) AS {qident(c + '__pct_negative')}",
+                f"AVG(CASE WHEN TRY_CAST({c_id} AS DOUBLE) = 0 THEN 1 ELSE 0 END) AS {qident(c + '__pct_zero')}",
+                f"AVG(CASE WHEN {c_id} IS NOT NULL AND TRY_CAST({c_id} AS DOUBLE) IS NULL THEN 1 ELSE 0 END) AS {qident(c + '__pct_failed_cast')}",
+            ]
+        )
+
+    sanity_sql = (
+        "SELECT "
+        + ", ".join(sanity_exprs)
+        + f" FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data"
+    )
+    sanity_wide = con.execute(sanity_sql).fetchdf()
+
+    rows = []
+    for c in numeric_focus:
+        rows.append(
+            {
+                "column_name": c,
+                "min_value": sanity_wide.loc[0, c + "__min"],
+                "max_value": sanity_wide.loc[0, c + "__max"],
+                "pct_negative": float(sanity_wide.loc[0, c + "__pct_negative"] or 0) * 100.0,
+                "pct_zero": float(sanity_wide.loc[0, c + "__pct_zero"] or 0) * 100.0,
+                "pct_failed_cast": float(sanity_wide.loc[0, c + "__pct_failed_cast"] or 0) * 100.0,
+            }
+        )
+
+    numeric_sanity = pd.DataFrame(rows).sort_values("pct_negative", ascending=False).reset_index(drop=True)
+    numeric_sanity.to_csv(OUTPUT_DIR / "numeric_sanity_checks.csv", index=False)
+    numeric_sanity
+```
+
+### Type-Casting Audit for Numeric-Like Text Columns
+
+```{python}
+numeric_like_name = re.compile(
+    r"(spend|payment|paid|charge|cost|amount|total|claim|beneficiary|bene|service|count|volume|utilization|rate|pct|percent)",
+    re.I,
+)
+varchar_markers = ("VARCHAR", "CHAR", "STRING", "TEXT")
+
+text_numeric_like_cols = []
+for row in schema_df.itertuples(index=False):
+    col = str(row.column_name)
+    typ = str(row.column_type).upper()
+    if any(marker in typ for marker in varchar_markers) and numeric_like_name.search(col.lower()):
+        text_numeric_like_cols.append(col)
+
+text_numeric_like_cols = text_numeric_like_cols[:20]
+
+if len(text_numeric_like_cols) == 0:
+    print("Skipped: no numeric-like text columns detected.")
+    cast_audit = pd.DataFrame()
+else:
+    audit_exprs = []
+    for c in text_numeric_like_cols:
+        c_id = qident(c)
+        cleaned = f"REGEXP_REPLACE({c_id}, '[^0-9\\\\.-]', '', 'g')"
+        audit_exprs.extend(
+            [
+                f"AVG(CASE WHEN {c_id} IS NOT NULL AND TRY_CAST({cleaned} AS DOUBLE) IS NOT NULL THEN 1 ELSE 0 END) AS {qident(c + '__pct_parseable')}",
+                f"AVG(CASE WHEN {c_id} IS NOT NULL AND TRY_CAST({cleaned} AS DOUBLE) IS NULL THEN 1 ELSE 0 END) AS {qident(c + '__pct_not_parseable')}",
+            ]
+        )
+
+    audit_sql = (
+        "SELECT "
+        + ", ".join(audit_exprs)
+        + f" FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data"
+    )
+    audit_wide = con.execute(audit_sql).fetchdf()
+
+    rows = []
+    for c in text_numeric_like_cols:
+        rows.append(
+            {
+                "column_name": c,
+                "pct_parseable_numeric": float(audit_wide.loc[0, c + "__pct_parseable"] or 0) * 100.0,
+                "pct_not_parseable_numeric": float(audit_wide.loc[0, c + "__pct_not_parseable"] or 0) * 100.0,
+            }
+        )
+
+    cast_audit = pd.DataFrame(rows).sort_values("pct_not_parseable_numeric", ascending=False).reset_index(drop=True)
+    cast_audit.to_csv(OUTPUT_DIR / "type_casting_audit_numeric_like_text.csv", index=False)
+    cast_audit
+```
+
+## Distribution and Concentration Analysis
+
+### Primary Spend Histogram (Linear + Log)
+
+```{python}
+if primary_spend_col is None:
+    print("Skipped: no spend-like numeric column detected.")
+else:
+    spend_sql = f"""
+    WITH sampled AS (
+        SELECT TRY_CAST({qident(primary_spend_col)} AS DOUBLE) AS spend_value
+        FROM medicaid_spending
+        USING SAMPLE 200000 ROWS (reservoir)
+    )
+    SELECT spend_value
+    FROM sampled
+    WHERE spend_value IS NOT NULL
+    """
+    spend_sample = con.execute(spend_sql).fetchdf()
+
+    if spend_sample.empty:
+        print("Skipped: no non-null values available for primary spend metric.")
+    else:
+        fig, axes = plt.subplots(1, 2, figsize=(14, 4.5))
+        sns.histplot(spend_sample["spend_value"], bins=60, ax=axes[0], color="#2a6f97")
+        axes[0].set_title(f"Distribution of {primary_spend_col} (sampled)")
+        axes[0].set_xlabel(primary_spend_col)
+        axes[0].set_ylabel("Count")
+
+        positive = spend_sample.loc[spend_sample["spend_value"] > 0, "spend_value"]
+        if len(positive) > 0:
+            sns.histplot(np.log10(positive), bins=60, ax=axes[1], color="#ee6c4d")
+            axes[1].set_title(f"log10 Distribution of {primary_spend_col} (>0)")
+            axes[1].set_xlabel(f"log10({primary_spend_col})")
+            axes[1].set_ylabel("Count")
+        else:
+            axes[1].text(0.5, 0.5, "No positive spend values", ha="center", va="center")
+            axes[1].set_axis_off()
+
+        plt.tight_layout()
+        plt.savefig(FIG_DIR / "histograms_primary_spend.png", bbox_inches="tight")
+        plt.show()
+```
+
+### Spend by Year (Boxplot)
+
+```{python}
+if primary_spend_col is None or year_col is None:
+    print("Skipped: requires both spend and year/date columns.")
+else:
+    year_levels_sql = f"""
+    SELECT CAST({qident(year_col)} AS VARCHAR) AS period_label, COUNT(*) AS n_rows
+    FROM medicaid_spending
+    WHERE {qident(year_col)} IS NOT NULL
+    GROUP BY 1
+    ORDER BY n_rows DESC
+    LIMIT 12
+    """
+    period_levels = con.execute(year_levels_sql).fetchdf()
+
+    if period_levels.empty:
+        print("Skipped: no non-null year/date values found.")
+    else:
+        labels = period_levels["period_label"].tolist()
+        labels_sql = ", ".join(["'" + x.replace("'", "''") + "'" for x in labels])
+        by_year_sql = f"""
+        WITH sampled AS (
+            SELECT
+                CAST({qident(year_col)} AS VARCHAR) AS period_label,
+                TRY_CAST({qident(primary_spend_col)} AS DOUBLE) AS spend_value
+            FROM medicaid_spending
+            USING SAMPLE 250000 ROWS (reservoir)
+        )
+        SELECT period_label, spend_value
+        FROM sampled
+        WHERE period_label IN ({labels_sql}) AND spend_value IS NOT NULL
+        """
+        by_year = con.execute(by_year_sql).fetchdf()
+
+        if by_year.empty:
+            print("Skipped: sampled spend-by-period data is empty.")
+        else:
+            plt.figure(figsize=(12, 4.8))
+            sns.boxplot(
+                data=by_year,
+                x="period_label",
+                y="spend_value",
+                showfliers=False,
+                color="#8ecae6",
+            )
+            plt.yscale("log")
+            plt.xlabel(year_col)
+            plt.ylabel(primary_spend_col + " (log scale)")
+            plt.title(f"{primary_spend_col} by {year_col} (sampled)")
+            plt.tight_layout()
+            plt.savefig(FIG_DIR / "boxplot_spend_by_year.png", bbox_inches="tight")
+            plt.show()
+```
+
+### Lorenz-Style Concentration Curve
+
+```{python}
+concentration_curve = pd.DataFrame()
+if primary_spend_col is None or provider_col is None:
+    print("Skipped: requires provider identifier and spend column.")
+else:
+    lorenz_sql = f"""
+    WITH provider_totals AS (
+        SELECT
+            CAST({qident(provider_col)} AS VARCHAR) AS provider_id,
+            SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) AS total_spend
+        FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+        WHERE {qident(provider_col)} IS NOT NULL
+        GROUP BY 1
+        HAVING SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) > 0
+    ),
+    binned AS (
+        SELECT
+            NTILE(1000) OVER (ORDER BY total_spend) AS spend_bin,
+            total_spend
+        FROM provider_totals
+    ),
+    agg AS (
+        SELECT
+            spend_bin,
+            COUNT(*) AS n_providers_bin,
+            SUM(total_spend) AS spend_bin_total
+        FROM binned
+        GROUP BY 1
+    ),
+    cum AS (
+        SELECT
+            spend_bin,
+            SUM(n_providers_bin) OVER (ORDER BY spend_bin) AS cum_providers,
+            SUM(spend_bin_total) OVER (ORDER BY spend_bin) AS cum_spend,
+            SUM(n_providers_bin) OVER () AS total_providers,
+            SUM(spend_bin_total) OVER () AS total_spend
+        FROM agg
+    )
+    SELECT
+        spend_bin,
+        cum_providers * 1.0 / NULLIF(total_providers, 0) AS cum_provider_share,
+        cum_spend * 1.0 / NULLIF(total_spend, 0) AS cum_spend_share
+    FROM cum
+    ORDER BY spend_bin
+    """
+    concentration_curve = con.execute(lorenz_sql).fetchdf()
+
+    if concentration_curve.empty:
+        print("Skipped: no valid provider-level spend totals found.")
+    else:
+        plt.figure(figsize=(6.5, 6.0))
+        plt.plot(
+            concentration_curve["cum_provider_share"],
+            concentration_curve["cum_spend_share"],
+            color="#264653",
+            linewidth=2.0,
+            label="Observed concentration",
+        )
+        plt.plot([0, 1], [0, 1], linestyle="--", color="gray", label="Perfect equality")
+        plt.xlabel("Cumulative share of providers")
+        plt.ylabel("Cumulative share of spending")
+        plt.title(f"Lorenz-style curve for {primary_spend_col}")
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(FIG_DIR / "lorenz_curve_primary_spend.png", bbox_inches="tight")
+        plt.show()
+
+        concentration_curve.to_csv(OUTPUT_DIR / "lorenz_curve_points.csv", index=False)
+```
+
+### Top-Share Table (Top 1%, 5%, 10%)
+
+```{python}
+top_share = pd.DataFrame()
+if primary_spend_col is None or provider_col is None:
+    print("Skipped: requires provider identifier and spend column.")
+else:
+    top_share_sql = f"""
+    WITH provider_totals AS (
+        SELECT
+            CAST({qident(provider_col)} AS VARCHAR) AS provider_id,
+            SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) AS total_spend
+        FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+        WHERE {qident(provider_col)} IS NOT NULL
+        GROUP BY 1
+        HAVING SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) > 0
+    ),
+    ranked AS (
+        SELECT
+            provider_id,
+            total_spend,
+            ROW_NUMBER() OVER (ORDER BY total_spend DESC) AS rn,
+            COUNT(*) OVER () AS total_n,
+            SUM(total_spend) OVER () AS total_spend_all
+        FROM provider_totals
+    )
+    SELECT
+        SUM(CASE WHEN rn <= CEIL(total_n * 0.01) THEN total_spend ELSE 0 END) / NULLIF(MAX(total_spend_all), 0) AS top_1pct_share,
+        SUM(CASE WHEN rn <= CEIL(total_n * 0.05) THEN total_spend ELSE 0 END) / NULLIF(MAX(total_spend_all), 0) AS top_5pct_share,
+        SUM(CASE WHEN rn <= CEIL(total_n * 0.10) THEN total_spend ELSE 0 END) / NULLIF(MAX(total_spend_all), 0) AS top_10pct_share
+    FROM ranked
+    """
+    top_share_wide = con.execute(top_share_sql).fetchdf()
+    top_share = pd.DataFrame(
+        [
+            {"group": "Top 1%", "share_of_total_spend": float(top_share_wide.loc[0, "top_1pct_share"] or 0)},
+            {"group": "Top 5%", "share_of_total_spend": float(top_share_wide.loc[0, "top_5pct_share"] or 0)},
+            {"group": "Top 10%", "share_of_total_spend": float(top_share_wide.loc[0, "top_10pct_share"] or 0)},
+        ]
+    )
+    top_share["share_of_total_spend_pct"] = top_share["share_of_total_spend"] * 100.0
+    top_share.to_csv(OUTPUT_DIR / "top_share_table.csv", index=False)
+    top_share
+```
+
+### Ranked Top Providers by Spend
+
+```{python}
+top_providers = pd.DataFrame()
+if primary_spend_col is None or provider_col is None:
+    print("Skipped: requires provider identifier and spend column.")
+else:
+    if volume_col is not None:
+        top_provider_sql = f"""
+        WITH provider_totals AS (
+            SELECT
+                CAST({qident(provider_col)} AS VARCHAR) AS provider_id,
+                SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) AS total_spend,
+                SUM(TRY_CAST({qident(volume_col)} AS DOUBLE)) AS total_volume
+            FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+            WHERE {qident(provider_col)} IS NOT NULL
+            GROUP BY 1
+        )
+        SELECT provider_id, total_spend, total_volume
+        FROM provider_totals
+        WHERE total_spend > 0
+          AND (total_volume IS NULL OR total_volume >= {MIN_VOLUME_FILTER})
+        ORDER BY total_spend DESC
+        LIMIT {TOP_N}
+        """
+    else:
+        top_provider_sql = f"""
+        WITH provider_totals AS (
+            SELECT
+                CAST({qident(provider_col)} AS VARCHAR) AS provider_id,
+                SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) AS total_spend
+            FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+            WHERE {qident(provider_col)} IS NOT NULL
+            GROUP BY 1
+        )
+        SELECT provider_id, total_spend
+        FROM provider_totals
+        WHERE total_spend > 0
+        ORDER BY total_spend DESC
+        LIMIT {TOP_N}
+        """
+
+    top_providers = con.execute(top_provider_sql).fetchdf()
+    top_providers.to_csv(OUTPUT_DIR / "top_providers_by_spend.csv", index=False)
+
+    if top_providers.empty:
+        print("Skipped: no provider-level spend rows after filters.")
+    else:
+        plot_df = top_providers.sort_values("total_spend", ascending=True)
+        plt.figure(figsize=(8.5, 6.2))
+        plt.barh(plot_df["provider_id"], plot_df["total_spend"], color="#457b9d")
+        plt.xlabel("Total spend")
+        plt.ylabel("Provider")
+        title = f"Top {TOP_N} providers by {primary_spend_col}"
+        if volume_col is not None:
+            title += f" (volume >= {MIN_VOLUME_FILTER})"
+        plt.title(title)
+        plt.tight_layout()
+        plt.savefig(FIG_DIR / "top_providers_by_spend.png", bbox_inches="tight")
+        plt.show()
+
+top_providers.head(10)
+```
+
+## HCPCS Rankings
+
+### Top HCPCS by Record Count, Total Claims, and Cost per Claim
+
+```{python}
+hcpcs_by_record_count = pd.DataFrame()
+hcpcs_by_total_claims = pd.DataFrame()
+hcpcs_by_cost_per_claim = pd.DataFrame()
+
+if not has_required_hcpcs_cols:
+    print(f"Skipped: missing one or more required HCPCS columns: {required_hcpcs_cols}")
+else:
+    hcpcs_sql = f"""
+    SELECT
+        CAST({qident(HCPCS_COL)} AS VARCHAR) AS hcpcs_code,
+        COUNT(*) AS record_count,
+        SUM(TRY_CAST({qident(CLAIMS_COL)} AS DOUBLE)) AS total_claims,
+        SUM(TRY_CAST({qident(PAID_COL)} AS DOUBLE)) AS total_paid,
+        SUM(TRY_CAST({qident(PAID_COL)} AS DOUBLE))
+          / NULLIF(SUM(TRY_CAST({qident(CLAIMS_COL)} AS DOUBLE)), 0) AS cost_per_claim
+    FROM medicaid_spending
+    WHERE {qident(HCPCS_COL)} IS NOT NULL
+    GROUP BY 1
+    """
+    hcpcs_agg = con.execute(hcpcs_sql).fetchdf()
+    hcpcs_agg["record_count"] = hcpcs_agg["record_count"].fillna(0).astype("int64")
+    hcpcs_agg["total_claims"] = hcpcs_agg["total_claims"].fillna(0.0)
+    hcpcs_agg["total_paid"] = hcpcs_agg["total_paid"].fillna(0.0)
+
+    hcpcs_by_record_count = (
+        hcpcs_agg.sort_values("record_count", ascending=False)
+        .head(HCPCS_TOP_N)
+        .reset_index(drop=True)
+    )
+    hcpcs_by_total_claims = (
+        hcpcs_agg.sort_values("total_claims", ascending=False)
+        .head(HCPCS_TOP_N)
+        .reset_index(drop=True)
+    )
+    hcpcs_by_cost_per_claim = (
+        hcpcs_agg.loc[hcpcs_agg["total_claims"] >= MIN_HCPCS_CLAIMS_FOR_CPP]
+        .sort_values("cost_per_claim", ascending=False)
+        .head(HCPCS_TOP_N)
+        .reset_index(drop=True)
+    )
+
+    hcpcs_by_record_count.to_csv(OUTPUT_DIR / "top_hcpcs_by_record_count.csv", index=False)
+    hcpcs_by_total_claims.to_csv(OUTPUT_DIR / "top_hcpcs_by_total_claims.csv", index=False)
+    hcpcs_by_cost_per_claim.to_csv(OUTPUT_DIR / "top_hcpcs_by_cost_per_claim.csv", index=False)
+
+    def plot_hcpcs_metric(df: pd.DataFrame, metric_col: str, title: str, out_name: str, color: str) -> None:
+        if df.empty:
+            print(f"Skipped figure `{out_name}`: source table is empty.")
+            return
+        plot_df = df.sort_values(metric_col, ascending=True)
+        plt.figure(figsize=(9.0, 6.0))
+        plt.barh(plot_df["hcpcs_code"], plot_df[metric_col], color=color)
+        plt.xlabel(metric_col)
+        plt.ylabel("HCPCS code")
+        plt.title(title)
+        plt.tight_layout()
+        plt.savefig(FIG_DIR / out_name, bbox_inches="tight")
+        plt.show()
+
+    plot_hcpcs_metric(
+        hcpcs_by_record_count,
+        "record_count",
+        f"Top {HCPCS_TOP_N} HCPCS by Record Count",
+        "top_hcpcs_by_record_count.png",
+        "#3a86ff",
+    )
+    plot_hcpcs_metric(
+        hcpcs_by_total_claims,
+        "total_claims",
+        f"Top {HCPCS_TOP_N} HCPCS by Total Claims",
+        "top_hcpcs_by_total_claims.png",
+        "#2a9d8f",
+    )
+    plot_hcpcs_metric(
+        hcpcs_by_cost_per_claim,
+        "cost_per_claim",
+        f"Top {HCPCS_TOP_N} HCPCS by Cost per Claim (claims >= {MIN_HCPCS_CLAIMS_FOR_CPP:,})",
+        "top_hcpcs_by_cost_per_claim.png",
+        "#e76f51",
+    )
+
+    hcpcs_rankings_generated = (
+        not hcpcs_by_record_count.empty
+        and not hcpcs_by_total_claims.empty
+        and not hcpcs_by_cost_per_claim.empty
+    )
+    print("HCPCS rankings generated:", hcpcs_rankings_generated)
+```
+
+```{python}
+if not hcpcs_by_record_count.empty:
+    display(hcpcs_by_record_count)
+```
+
+```{python}
+if not hcpcs_by_total_claims.empty:
+    display(hcpcs_by_total_claims)
+```
+
+```{python}
+if not hcpcs_by_cost_per_claim.empty:
+    display(hcpcs_by_cost_per_claim)
+```
+
+## NPI-Specific Benchmarking
+
+### Presence, Percentiles, and Month-to-Month Stability
+
+```{python}
+npi_slug = re.sub(r"[^0-9A-Za-z_-]+", "_", TARGET_NPI)
+target_npi_sql = TARGET_NPI.replace("'", "''")
+
+npi_presence = pd.DataFrame()
+npi_role_breakdown = pd.DataFrame()
+npi_monthly_metrics = pd.DataFrame()
+npi_monthly_percentiles = pd.DataFrame()
+npi_summary = pd.DataFrame()
+
+if not has_required_npi_cols:
+    status_df = pd.DataFrame(
+        [
+            {
+                "target_npi": TARGET_NPI,
+                "npi_scope": NPI_SCOPE,
+                "npi_present_in_data": False,
+                "message": f"Skipped NPI section: required columns missing: {required_npi_cols}",
+            }
+        ]
+    )
+    status_df.to_csv(OUTPUT_DIR / f"npi_{npi_slug}_status.csv", index=False)
+    print(status_df.loc[0, "message"])
+    npi_section_completed = True
+else:
+    npi_presence_sql = f"""
+    SELECT
+        SUM(CASE WHEN TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}' THEN 1 ELSE 0 END) AS billing_rows,
+        SUM(CASE WHEN TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}' THEN 1 ELSE 0 END) AS servicing_rows,
+        SUM(
+            CASE
+                WHEN TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                  OR TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                THEN 1 ELSE 0
+            END
+        ) AS either_rows,
+        MIN(
+            CASE
+                WHEN TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                  OR TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                THEN CAST({qident(MONTH_COL)} AS VARCHAR)
+            END
+        ) AS min_month,
+        MAX(
+            CASE
+                WHEN TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                  OR TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                THEN CAST({qident(MONTH_COL)} AS VARCHAR)
+            END
+        ) AS max_month,
+        COUNT(
+            DISTINCT CASE
+                WHEN TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                  OR TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                THEN CAST({qident(MONTH_COL)} AS VARCHAR)
+            END
+        ) AS months_present,
+        COUNT(
+            DISTINCT CASE
+                WHEN TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                  OR TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                THEN CAST({qident(HCPCS_COL)} AS VARCHAR)
+            END
+        ) AS hcpcs_present
+    FROM medicaid_spending
+    """
+    npi_presence = con.execute(npi_presence_sql).fetchdf()
+    npi_present_in_data = bool((npi_presence.loc[0, "either_rows"] or 0) > 0)
+
+    npi_role_sql = f"""
+    SELECT
+        CASE
+            WHEN TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+              AND TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}' THEN 'both'
+            WHEN TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}' THEN 'billing_only'
+            WHEN TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}' THEN 'servicing_only'
+        END AS npi_role,
+        COUNT(*) AS n_rows,
+        SUM(TRY_CAST({qident(CLAIMS_COL)} AS DOUBLE)) AS total_claims,
+        SUM(TRY_CAST({qident(PAID_COL)} AS DOUBLE)) AS total_paid
+    FROM medicaid_spending
+    WHERE TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+       OR TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+    GROUP BY 1
+    ORDER BY n_rows DESC
+    """
+    npi_role_breakdown = con.execute(npi_role_sql).fetchdf()
+
+    if not npi_present_in_data:
+        status_df = pd.DataFrame(
+            [
+                {
+                    "target_npi": TARGET_NPI,
+                    "npi_scope": NPI_SCOPE,
+                    "npi_present_in_data": False,
+                    "billing_rows": int(npi_presence.loc[0, "billing_rows"] or 0),
+                    "servicing_rows": int(npi_presence.loc[0, "servicing_rows"] or 0),
+                    "either_rows": int(npi_presence.loc[0, "either_rows"] or 0),
+                    "months_present": int(npi_presence.loc[0, "months_present"] or 0),
+                    "message": "Target NPI not present in BILLING_PROVIDER_NPI_NUM or SERVICING_PROVIDER_NPI_NUM.",
+                }
+            ]
+        )
+        status_df.to_csv(OUTPUT_DIR / f"npi_{npi_slug}_status.csv", index=False)
+        print(status_df.loc[0, "message"])
+        print("Percentile and month-to-month stability plots were skipped.")
+        npi_section_completed = True
+    else:
+        provider_long_exact_sql = build_provider_long_view(NPI_SCOPE, "medicaid_spending")
+
+        npi_monthly_sql = f"""
+        WITH provider_long AS (
+            {provider_long_exact_sql}
+        )
+        SELECT
+            claim_month,
+            SUM(total_paid) AS total_paid,
+            SUM(total_claims) AS total_claims,
+            SUM(total_paid) / NULLIF(SUM(total_claims), 0) AS cost_per_claim,
+            COUNT(*) AS record_count
+        FROM provider_long
+        WHERE provider_npi = '{target_npi_sql}'
+        GROUP BY 1
+        ORDER BY claim_month
+        """
+        npi_monthly_metrics = con.execute(npi_monthly_sql).fetchdf()
+
+        if not npi_monthly_metrics.empty:
+            npi_monthly_metrics["mom_paid_pct_change"] = npi_monthly_metrics["total_paid"].pct_change() * 100.0
+            npi_monthly_metrics.to_csv(OUTPUT_DIR / f"npi_{npi_slug}_monthly_metrics.csv", index=False)
+
+            fig, ax1 = plt.subplots(figsize=(11.0, 5.0))
+            ax1.plot(npi_monthly_metrics["claim_month"], npi_monthly_metrics["total_paid"], color="#1d3557", marker="o")
+            ax1.set_ylabel("Total paid", color="#1d3557")
+            ax1.tick_params(axis="y", labelcolor="#1d3557")
+            ax1.set_xlabel("Claim month")
+
+            ax2 = ax1.twinx()
+            ax2.plot(npi_monthly_metrics["claim_month"], npi_monthly_metrics["total_claims"], color="#e76f51", marker="o")
+            ax2.set_ylabel("Total claims", color="#e76f51")
+            ax2.tick_params(axis="y", labelcolor="#e76f51")
+
+            plt.title(f"NPI {TARGET_NPI}: monthly paid and claims")
+            plt.xticks(rotation=45, ha="right")
+            plt.tight_layout()
+            plt.savefig(FIG_DIR / f"npi_{npi_slug}_monthly_paid_claims.png", bbox_inches="tight")
+            plt.show()
+
+            if npi_monthly_metrics["mom_paid_pct_change"].notna().any():
+                plt.figure(figsize=(11.0, 4.8))
+                plt.bar(
+                    npi_monthly_metrics["claim_month"],
+                    npi_monthly_metrics["mom_paid_pct_change"],
+                    color="#6a994e",
+                )
+                plt.axhline(0, color="black", linewidth=1)
+                plt.xticks(rotation=45, ha="right")
+                plt.ylabel("MoM paid % change")
+                plt.xlabel("Claim month")
+                plt.title(f"NPI {TARGET_NPI}: month-to-month paid stability")
+                plt.tight_layout()
+                plt.savefig(FIG_DIR / f"npi_{npi_slug}_mom_stability.png", bbox_inches="tight")
+                plt.show()
+
+        peer_source_relation = f"""
+            (
+                SELECT *
+                FROM (
+                    SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)
+                ) sampled_pool
+                WHERE NOT (
+                    TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                    OR TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                )
+                UNION ALL
+                SELECT *
+                FROM medicaid_spending
+                WHERE TRIM(CAST({qident(BILLING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+                   OR TRIM(CAST({qident(SERVICING_NPI_COL)} AS VARCHAR)) = '{target_npi_sql}'
+            ) peer_source
+        """
+        provider_long_peer_sql = build_provider_long_view(NPI_SCOPE, peer_source_relation)
+
+        npi_percentile_sql = f"""
+        WITH provider_long AS (
+            {provider_long_peer_sql}
+        ),
+        provider_month AS (
+            SELECT claim_month, provider_npi, SUM(total_paid) AS month_paid
+            FROM provider_long
+            WHERE claim_month IS NOT NULL
+            GROUP BY 1, 2
+        ),
+        target_month AS (
+            SELECT claim_month, month_paid AS target_month_paid
+            FROM provider_month
+            WHERE provider_npi = '{target_npi_sql}'
+        ),
+        ranked AS (
+            SELECT
+                pm.claim_month,
+                tm.target_month_paid,
+                COUNT(*) AS peer_count,
+                SUM(CASE WHEN pm.month_paid <= tm.target_month_paid THEN 1 ELSE 0 END) AS le_count
+            FROM provider_month pm
+            JOIN target_month tm ON pm.claim_month = tm.claim_month
+            GROUP BY 1, 2
+        )
+        SELECT
+            claim_month,
+            target_month_paid,
+            peer_count,
+            100.0 * le_count / NULLIF(peer_count, 0) AS month_paid_percentile
+        FROM ranked
+        ORDER BY claim_month
+        """
+        npi_monthly_percentiles = con.execute(npi_percentile_sql).fetchdf()
+        if not npi_monthly_percentiles.empty:
+            npi_monthly_percentiles.to_csv(OUTPUT_DIR / f"npi_{npi_slug}_monthly_percentiles.csv", index=False)
+            plt.figure(figsize=(11.0, 4.8))
+            plt.plot(
+                npi_monthly_percentiles["claim_month"],
+                npi_monthly_percentiles["month_paid_percentile"],
+                color="#8338ec",
+                marker="o",
+            )
+            plt.ylim(0, 100)
+            plt.xticks(rotation=45, ha="right")
+            plt.ylabel("Monthly paid percentile")
+            plt.xlabel("Claim month")
+            plt.title(f"NPI {TARGET_NPI}: monthly percentile vs peers ({NPI_SCOPE} scope)")
+            plt.tight_layout()
+            plt.savefig(FIG_DIR / f"npi_{npi_slug}_monthly_percentile.png", bbox_inches="tight")
+            plt.show()
+
+        overall_percentile_sql = f"""
+        WITH provider_long AS (
+            {provider_long_peer_sql}
+        ),
+        provider_totals AS (
+            SELECT provider_npi, SUM(total_paid) AS total_paid
+            FROM provider_long
+            GROUP BY 1
+        ),
+        target_total AS (
+            SELECT total_paid AS target_total_paid
+            FROM provider_totals
+            WHERE provider_npi = '{target_npi_sql}'
+            LIMIT 1
+        )
+        SELECT
+            target_total_paid,
+            COUNT(*) AS peer_provider_count,
+            100.0 * SUM(CASE WHEN provider_totals.total_paid <= target_total.target_total_paid THEN 1 ELSE 0 END)
+                / NULLIF(COUNT(*), 0) AS overall_paid_percentile
+        FROM provider_totals
+        CROSS JOIN target_total
+        """
+        overall_percentile = con.execute(overall_percentile_sql).fetchdf()
+
+        dataset_month_stats_sql = f"""
+        SELECT
+            COUNT(DISTINCT CAST({qident(MONTH_COL)} AS VARCHAR)) AS dataset_month_count,
+            MIN(CAST({qident(MONTH_COL)} AS VARCHAR)) AS dataset_min_month,
+            MAX(CAST({qident(MONTH_COL)} AS VARCHAR)) AS dataset_max_month
+        FROM medicaid_spending
+        """
+        dataset_month_stats = con.execute(dataset_month_stats_sql).fetchdf()
+
+        observed_months = int(npi_monthly_metrics["claim_month"].nunique()) if not npi_monthly_metrics.empty else 0
+        dataset_month_count = int(dataset_month_stats.loc[0, "dataset_month_count"] or 0)
+        missing_months = max(dataset_month_count - observed_months, 0)
+        cv_paid = safe_ratio(
+            npi_monthly_metrics["total_paid"].std(ddof=1) if len(npi_monthly_metrics) > 1 else np.nan,
+            npi_monthly_metrics["total_paid"].mean() if not npi_monthly_metrics.empty else np.nan,
+        )
+
+        npi_summary = pd.DataFrame(
+            [
+                {
+                    "target_npi": TARGET_NPI,
+                    "npi_scope": NPI_SCOPE,
+                    "npi_present_in_data": True,
+                    "observed_months": observed_months,
+                    "dataset_month_count": dataset_month_count,
+                    "missing_months_in_dataset_range": missing_months,
+                    "dataset_min_month": dataset_month_stats.loc[0, "dataset_min_month"],
+                    "dataset_max_month": dataset_month_stats.loc[0, "dataset_max_month"],
+                    "npi_min_month": npi_presence.loc[0, "min_month"],
+                    "npi_max_month": npi_presence.loc[0, "max_month"],
+                    "months_present": int(npi_presence.loc[0, "months_present"] or 0),
+                    "hcpcs_present": int(npi_presence.loc[0, "hcpcs_present"] or 0),
+                    "billing_rows": int(npi_presence.loc[0, "billing_rows"] or 0),
+                    "servicing_rows": int(npi_presence.loc[0, "servicing_rows"] or 0),
+                    "either_rows": int(npi_presence.loc[0, "either_rows"] or 0),
+                    "overall_paid_percentile": float(overall_percentile.loc[0, "overall_paid_percentile"] or np.nan)
+                    if not overall_percentile.empty
+                    else np.nan,
+                    "peer_provider_count": float(overall_percentile.loc[0, "peer_provider_count"] or np.nan)
+                    if not overall_percentile.empty
+                    else np.nan,
+                    "coefficient_of_variation_paid": cv_paid,
+                }
+            ]
+        )
+        npi_summary.to_csv(OUTPUT_DIR / f"npi_{npi_slug}_summary.csv", index=False)
+        npi_section_completed = True
+```
+
+```{python}
+if not npi_presence.empty:
+    display(npi_presence)
+if not npi_role_breakdown.empty:
+    display(npi_role_breakdown)
+if not npi_summary.empty:
+    display(npi_summary)
+```
+
+## Multivariate and Segmentation Diagnostics
+
+### Spend vs Volume (Provider-Level Scatter, Log-Log)
+
+```{python}
+if primary_spend_col is None or provider_col is None or volume_col is None:
+    print("Skipped: requires provider, spend, and volume columns.")
+else:
+    scatter_sql = f"""
+    WITH provider_totals AS (
+        SELECT
+            CAST({qident(provider_col)} AS VARCHAR) AS provider_id,
+            SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) AS total_spend,
+            SUM(TRY_CAST({qident(volume_col)} AS DOUBLE)) AS total_volume
+        FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+        WHERE {qident(provider_col)} IS NOT NULL
+        GROUP BY 1
+    ),
+    sampled AS (
+        SELECT total_spend, total_volume
+        FROM provider_totals
+        WHERE total_spend > 0 AND total_volume > 0
+        USING SAMPLE 50000 ROWS (reservoir)
+    )
+    SELECT total_spend, total_volume
+    FROM sampled
+    """
+    scatter_df = con.execute(scatter_sql).fetchdf()
+
+    if scatter_df.empty:
+        print("Skipped: no positive spend/volume provider rows available.")
+    else:
+        plt.figure(figsize=(7.5, 6.0))
+        plt.hexbin(
+            scatter_df["total_volume"],
+            scatter_df["total_spend"],
+            gridsize=45,
+            bins="log",
+            mincnt=1,
+            cmap="viridis",
+        )
+        cbar = plt.colorbar()
+        cbar.set_label("log10(count)")
+        plt.xscale("log")
+        plt.yscale("log")
+        plt.xlabel(f"Provider-level {volume_col}")
+        plt.ylabel(f"Provider-level {primary_spend_col}")
+        plt.title("Provider-level spend vs volume (log-log hexbin)")
+        plt.tight_layout()
+        plt.savefig(FIG_DIR / "scatter_spend_vs_volume_hexbin.png", bbox_inches="tight")
+        plt.show()
+```
+
+### Correlation Heatmap (Numeric Measures)
+
+```{python}
+corr_candidates = list(dict.fromkeys(roles.get("spend", []) + roles.get("volume", [])))
+corr_candidates = [c for c in corr_candidates if c in numeric_cols]
+
+if len(corr_candidates) < 2:
+    corr_candidates = [c for c in numeric_cols if c not in {year_col, provider_col}][:8]
+else:
+    corr_candidates = corr_candidates[:8]
+
+if len(corr_candidates) < 2:
+    print("Skipped: fewer than two numeric columns available for correlation.")
+else:
+    corr_select = ", ".join([f"TRY_CAST({qident(c)} AS DOUBLE) AS {qident(c)}" for c in corr_candidates])
+    corr_sql = f"""
+    WITH sampled AS (
+        SELECT {corr_select}
+        FROM medicaid_spending
+        USING SAMPLE 100000 ROWS (reservoir)
+    )
+    SELECT *
+    FROM sampled
+    """
+    corr_sample = con.execute(corr_sql).fetchdf()
+    corr_mat = corr_sample[corr_candidates].corr(numeric_only=True)
+    corr_mat.to_csv(OUTPUT_DIR / "correlation_matrix.csv")
+
+    plt.figure(figsize=(7.5, 6.2))
+    sns.heatmap(
+        corr_mat,
+        cmap="coolwarm",
+        center=0,
+        vmin=-1,
+        vmax=1,
+        annot=True,
+        fmt=".2f",
+        square=True,
+        linewidths=0.5,
+    )
+    plt.title("Correlation heatmap (sampled numeric metrics)")
+    plt.tight_layout()
+    plt.savefig(FIG_DIR / "correlation_heatmap.png", bbox_inches="tight")
+    plt.show()
+```
+
+### Group Summaries (Geo/Specialty/Taxonomy)
+
+```{python}
+group_candidates = []
+for role_key in ["geo", "specialty", "taxonomy"]:
+    group_candidates.extend(roles.get(role_key, []))
+group_candidates = list(dict.fromkeys([c for c in group_candidates if c in all_cols]))[:3]
+
+group_summaries = {}
+if primary_spend_col is None:
+    print("Skipped: no primary spend column detected.")
+elif not group_candidates:
+    print("Skipped: no geo/specialty/taxonomy columns detected.")
+else:
+    for group_col in group_candidates:
+        if provider_col is not None:
+            group_sql = f"""
+            SELECT
+                CAST({qident(group_col)} AS VARCHAR) AS group_value,
+                COUNT(*) AS n_rows,
+                COUNT(DISTINCT CAST({qident(provider_col)} AS VARCHAR)) AS n_unique_providers,
+                SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) AS total_spend,
+                AVG(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) AS avg_spend
+            FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+            WHERE {qident(group_col)} IS NOT NULL
+            GROUP BY 1
+            HAVING SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) IS NOT NULL
+            ORDER BY total_spend DESC
+            LIMIT 20
+            """
+        else:
+            group_sql = f"""
+            SELECT
+                CAST({qident(group_col)} AS VARCHAR) AS group_value,
+                COUNT(*) AS n_rows,
+                SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) AS total_spend,
+                AVG(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) AS avg_spend
+            FROM (SELECT * FROM medicaid_spending USING SAMPLE {HEAVY_QUERY_SAMPLE_ROWS} ROWS (reservoir)) sampled_data
+            WHERE {qident(group_col)} IS NOT NULL
+            GROUP BY 1
+            HAVING SUM(TRY_CAST({qident(primary_spend_col)} AS DOUBLE)) IS NOT NULL
+            ORDER BY total_spend DESC
+            LIMIT 20
+            """
+
+        gdf = con.execute(group_sql).fetchdf()
+        group_summaries[group_col] = gdf
+        gdf.to_csv(OUTPUT_DIR / f"group_summary_{group_col}.csv", index=False)
+
+        if not gdf.empty:
+            plt.figure(figsize=(9.0, 5.0))
+            plot_df = gdf.sort_values("total_spend", ascending=True)
+            plt.barh(plot_df["group_value"], plot_df["total_spend"], color="#6d597a")
+            plt.xlabel("Total spend")
+            plt.ylabel(group_col)
+            plt.title(f"Top groups by total spend: {group_col}")
+            plt.tight_layout()
+            safe_col = re.sub(r"[^A-Za-z0-9_-]+", "_", group_col)
+            plt.savefig(FIG_DIR / f"group_summary_{safe_col}.png", bbox_inches="tight")
+            plt.show()
+```
+
+```{python}
+if group_summaries:
+    for col_name, gdf in group_summaries.items():
+        print(f"\nTop rows for {col_name}")
+        display(gdf.head(10))
+```
+
+## Validation Checks and Closing Summary
+
+```{python}
+validation_results = {
+    "ingestion_row_count_gt_zero": bool(row_count > 0),
+    "schema_has_any_column": bool(len(all_cols) > 0),
+    "role_detection_returned_dict": isinstance(roles, dict),
+    "missingness_in_bounds": bool(missing_long["pct_missing"].between(0, 100).all()),
+    "primary_spend_found": bool(primary_spend_col is not None),
+    "hcpcs_rankings_generated": bool(hcpcs_rankings_generated),
+    "npi_section_completed": bool(npi_section_completed),
+    "npi_present_in_data": bool(npi_present_in_data),
+}
+
+validation_df = pd.DataFrame(
+    [{"check": k, "passed": v} for k, v in validation_results.items()]
+).sort_values("passed", ascending=True)
+
+validation_df.to_csv(OUTPUT_DIR / "validation_checks.csv", index=False)
+validation_df
+```
+
+```{python}
+print("Notebook complete.")
+print(f"Figures saved to: {FIG_DIR}")
+print(f"Tabular outputs saved to: {OUTPUT_DIR}")
+print("If a section says 'Skipped', it means required columns were not detected.")
+```

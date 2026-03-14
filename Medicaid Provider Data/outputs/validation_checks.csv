@@ -1,0 +1,9 @@
+check,passed
+npi_present_in_data,False
+ingestion_row_count_gt_zero,True
+schema_has_any_column,True
+role_detection_returned_dict,True
+missingness_in_bounds,True
+primary_spend_found,True
+hcpcs_rankings_generated,True
+npi_section_completed,True

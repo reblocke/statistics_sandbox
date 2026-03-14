@@ -1,0 +1,2 @@
+target_npi,npi_scope,npi_present_in_data,billing_rows,servicing_rows,either_rows,months_present,message
+1295199313,either,False,0,0,0,0,Target NPI not present in BILLING_PROVIDER_NPI_NUM or SERVICING_PROVIDER_NPI_NUM.

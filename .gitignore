@@ -1,6 +1,16 @@
+# macOS metadata
 .DS_Store
+
+# Project data exclusions
 NRH Vent Proj/data
 /NRH Vent Proj/data
 NRH Vent Proj/data/2023-8-22 NRH SCI FINAL.xlsx
-.DS_Store
-.DS_Store
+Medicaid Provider Data/.cache/
+Medicaid Provider Data/.tmp/
+Medicaid Provider Data/medicaid-provider-spending.parquet
+
+# Python environments and caches
+.venv/
+venv/
+*/.venv/
+__pycache__/

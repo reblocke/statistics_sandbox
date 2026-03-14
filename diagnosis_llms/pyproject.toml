@@ -1,0 +1,5 @@
+[project]
+name = "diagnosis-llms-transfer"
+version = "0.0.0"
+description = "Transferred exploratory notebooks and support utilities for statistics_sandbox."
+requires-python = ">=3.10"
